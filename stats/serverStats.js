@@ -1,0 +1,265 @@
+const { AttachmentBuilder } = require("discord.js");
+const { createStatsCard } = require("../card");
+const { sendLatestCard } = require("../commands/utility/cardMessageManager");
+const { getTimeWindows } = require("./timeWindows");
+const { searchNewestBestGamesOutNow } = require("../gaming/rawg");
+
+function dbGet(db, sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row || {})));
+    });
+}
+
+function dbAll(db, sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
+    });
+}
+
+function overlapSecondsExpression(alias = "") {
+    const prefix = alias ? `${alias}.` : "";
+
+    return `
+        CASE
+            WHEN COALESCE(${prefix}left_at, ?) <= ? THEN 0
+            WHEN ${prefix}joined_at >= ? THEN 0
+            ELSE CAST((MIN(COALESCE(${prefix}left_at, ?), ?) - MAX(${prefix}joined_at, ?)) / 1000 AS INTEGER)
+        END
+    `;
+}
+
+async function getServerStats(db, guild) {
+    const { now, oneDayAgo, sevenDaysAgo, thirtyDaysAgo } = getTimeWindows();
+    const guildId = guild.id;
+
+    const messageQuery = dbGet(
+        db,
+        `
+        SELECT
+            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_1d,
+            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_7d,
+            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_30d
+        FROM messages
+        WHERE guild_id = ?
+        `,
+        [oneDayAgo, sevenDaysAgo, thirtyDaysAgo, guildId]
+    );
+
+    const voiceQuery = dbGet(
+        db,
+        `
+        SELECT
+            SUM(${overlapSecondsExpression()}) AS voice_1d,
+            SUM(${overlapSecondsExpression()}) AS voice_7d,
+            SUM(${overlapSecondsExpression()}) AS voice_30d
+        FROM voice_sessions
+        WHERE guild_id = ?
+        `,
+        [
+            now, oneDayAgo, now, now, now, oneDayAgo,
+            now, sevenDaysAgo, now, now, now, sevenDaysAgo,
+            now, thirtyDaysAgo, now, now, now, thirtyDaysAgo,
+            guildId
+        ]
+    );
+
+    const topUsersQuery = dbAll(
+        db,
+        `
+        SELECT
+            user_id,
+            username,
+            ROUND(SUM(${overlapSecondsExpression()}) / 3600.0, 2) AS hours
+        FROM voice_sessions
+        WHERE guild_id = ?
+        GROUP BY user_id
+        HAVING hours > 0
+        ORDER BY hours DESC
+        LIMIT 5
+        `,
+        [now, thirtyDaysAgo, now, now, now, thirtyDaysAgo, guildId]
+    );
+
+    const topChannelsQuery = dbAll(
+        db,
+        `
+        SELECT
+            channel_id,
+            channel_name,
+            ROUND(SUM(${overlapSecondsExpression()}) / 3600.0, 2) AS hours
+        FROM voice_sessions
+        WHERE guild_id = ?
+        GROUP BY channel_id
+        HAVING hours > 0
+        ORDER BY hours DESC
+        LIMIT 5
+        `,
+        [now, thirtyDaysAgo, now, now, now, thirtyDaysAgo, guildId]
+    );
+
+    const topStreamerQuery = dbGet(
+        db,
+        `
+        SELECT
+            user_id,
+            username,
+            ROUND(SUM(${overlapSecondsExpression().replaceAll("left_at", "ended_at").replaceAll("joined_at", "started_at")}) / 3600.0, 2) AS hours
+        FROM stream_sessions
+        WHERE guild_id = ?
+        GROUP BY user_id
+        HAVING hours > 0
+        ORDER BY hours DESC
+        LIMIT 1
+        `,
+        [now, thirtyDaysAgo, now, now, now, thirtyDaysAgo, guildId]
+    );
+
+    const [msgStats, voiceStats, topUsers, topChannels, topStreamer] = await Promise.all([
+        messageQuery,
+        voiceQuery,
+        topUsersQuery,
+        topChannelsQuery,
+        topStreamerQuery
+    ]);
+
+    return {
+        now,
+        msgStats,
+        voiceStats,
+        topUsers,
+        topChannels,
+        topStreamer
+    };
+}
+
+function buildChannelBoard(topChannels = []) {
+    const medals = ["🥇", "🥈", "🥉", "🏅", "🏅"];
+
+    return topChannels.map((channel, index) => {
+        return `${medals[index] || "🏅"} ${channel.channel_name || "Unknown Channel"} - ${channel.hours || 0} hrs`;
+    });
+}
+
+function buildTopMembers(guild, topUsers = []) {
+    return topUsers.map((user) => {
+        const member = guild.members.cache.get(user.user_id);
+
+        return {
+            username: member?.user?.username || user.username || "Unknown",
+            hours: user.hours || 0,
+            avatarURL: member
+                ? member.user.displayAvatarURL({ extension: "png", size: 128 })
+                : null
+        };
+    });
+}
+
+function buildTopStreamer(guild, topStreamer = {}) {
+    if (!topStreamer || !topStreamer.user_id) {
+        return null;
+    }
+
+    const member = guild.members.cache.get(topStreamer.user_id);
+
+    return {
+        userId: topStreamer.user_id,
+        username: member?.displayName || member?.user?.username || topStreamer.username || "Unknown",
+        hours: Number(topStreamer.hours || 0),
+        avatarURL: member
+            ? member.displayAvatarURL({ extension: "png", size: 128 })
+            : null
+    };
+}
+
+async function getGameData(db, guildId, getLatestGameSearch) {
+    let fallbackGameData = null;
+
+    if (typeof getLatestGameSearch === "function") {
+        fallbackGameData = await getLatestGameSearch(db, guildId).catch(() => null);
+    }
+
+    try {
+        const rawgResult = await searchNewestBestGamesOutNow();
+        return rawgResult.card;
+    } catch (error) {
+        console.log("RAWG game card failed, using saved game search:", error.message);
+        return fallbackGameData || {
+            genre: "Top Games",
+            topPick: "RAWG unavailable",
+            rating: "N/A",
+            metacritic: "N/A",
+            released: "N/A",
+            platforms: "Try again later",
+            topThree: []
+        };
+    }
+}
+
+async function buildServerStatsBuffer(db, guild, getLatestGameSearch) {
+    const [stats, gameData] = await Promise.all([
+        getServerStats(db, guild),
+        getGameData(db, guild.id, getLatestGameSearch)
+    ]);
+
+    const messages1d = stats.msgStats.messages_1d || 0;
+    const messages7d = stats.msgStats.messages_7d || 0;
+    const messages30d = stats.msgStats.messages_30d || 0;
+
+    const voice1d = Number(((stats.voiceStats.voice_1d || 0) / 3600).toFixed(2));
+    const voice7d = Number(((stats.voiceStats.voice_7d || 0) / 3600).toFixed(2));
+    const voice30d = Number(((stats.voiceStats.voice_30d || 0) / 3600).toFixed(2));
+
+    const topMembers = buildTopMembers(guild, stats.topUsers);
+    const topStreamer = buildTopStreamer(guild, stats.topStreamer);
+    const channelBoard = buildChannelBoard(stats.topChannels);
+
+    return createStatsCard({
+        messages1d,
+        messages7d,
+        messages30d,
+        voice1d,
+        voice7d,
+        voice30d,
+        topStreamer,
+        topMembers,
+        topChannels: channelBoard.length ? channelBoard : ["No channel data"],
+        game: gameData
+    });
+}
+
+async function buildServerStatsAttachment(db, guild, getLatestGameSearch) {
+    const cardBuffer = await buildServerStatsBuffer(db, guild, getLatestGameSearch);
+
+    return new AttachmentBuilder(cardBuffer, {
+        name: "high-society-stats.png"
+    });
+}
+async function sendServerStats(db, target, getLatestGameSearch) {
+    try {
+        const guild = target.guild;
+        const channel = target.channel || target;
+        const userId = target.author?.id || target.user?.id || "server-stats";
+        const cardBuffer = await buildServerStatsBuffer(
+            db,
+            guild,
+            getLatestGameSearch
+        );
+
+        return sendLatestCard({
+            channel,
+            userId,
+            cardType: "server-stats",
+            buffer: cardBuffer,
+            fileName: "high-society-stats.png"
+        });
+    } catch (error) {
+        console.error("Stats card error:", error);
+        return target.reply("Error creating stats card.");
+    }
+}
+module.exports = {
+    getServerStats,
+    buildServerStatsBuffer,
+    buildServerStatsAttachment,
+    sendServerStats
+};
