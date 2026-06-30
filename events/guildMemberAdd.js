@@ -7,7 +7,7 @@ function findFallbackWelcomeChannel(guild) {
         if (channel.type !== ChannelType.GuildText) return false;
 
         const name = channel.name.toLowerCase();
-        return ["welcome", "general", "lobby"].includes(name);
+        return ["welcome", "Welcome", "lobby"].includes(name);
     });
 }
 

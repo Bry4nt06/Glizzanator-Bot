@@ -11,10 +11,6 @@ cache/
 temp/
 Backups/
 GoogleDrive Uploads/
-preview-output/
-preview/output/
-preview.png
-glizzboard-output.png
 .DS_Store
 node_modules/
 .env
