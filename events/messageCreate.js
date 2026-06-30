@@ -17,7 +17,12 @@ module.exports = function registerMessageCreateEvent(client, db) {
                 message.channel.id,
                 message.guild.id,
                 now
-            ]
+            ],
+            (error) => {
+                if (error) {
+                    console.error("Message tracking insert failed:", error);
+                }
+            }
         );
     });
 };
