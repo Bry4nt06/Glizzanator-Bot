@@ -1,13 +1,18 @@
 # Glizzanator Bot
 
-High Society Discord bot focused on server activity stats, user stat cards, leaderboards, RAWG game lookups, and Glizzboard card previews.
+High Society Discord bot focused on server activity stats, user stat cards, leaderboards, RAWG game lookups, stream tracking, welcome cards, and Glizzboard previews.
 
-This build is focused on stats, cards, and game features.
+## Requirements
+
+- Node.js 18 or newer
+- A Discord bot application
+- A Discord server for slash command deployment
+- RAWG API key for game lookup features
 
 ## Setup
 
 1. Copy `.env.example` to `.env`.
-2. Fill in `DISCORD_TOKEN`, `CLIENT_ID`, `GUILD_ID`, and `RAWG_API_KEY`.
+2. Fill in your Discord and RAWG values.
 3. Install dependencies:
 
 ```bash
@@ -26,6 +31,27 @@ npm run deploy
 npm start
 ```
 
+## Environment variables
+
+Required:
+
+```text
+DISCORD_TOKEN=
+CLIENT_ID=
+GUILD_ID=
+RAWG_API_KEY=
+```
+
+Optional:
+
+```text
+WELCOME_CHANNEL_ID=
+STREAM_ALERT_CHANNEL_ID=
+STREAM_LOG_CHANNEL_ID=
+BOT_LOG_CHANNEL_ID=
+ENABLE_WELCOME_NICKNAME=false
+```
+
 ## Available commands
 
 - `/ping`
@@ -34,27 +60,25 @@ npm start
 - `/leaderboard`
 - `/topgames`
 - `/recentgames`
+- `/glizzboard`
+- `/glizzify`
+- `/testwelcome`
 
-## Glizzboard preview
+## Card previews
 
 Generate a one-time preview:
 
 ```bash
-node preview-card.js cards/glizzboardCard.js
-node preview-card.js cards/serverCard.js
-node preview-card.js cards/userCard.js
-
-node watch-card.js cards/serverCard.js
+npm run preview -- cards/glizzboardCard.js
+npm run preview -- cards/serverCard.js
+npm run preview -- cards/userCard.js
 ```
 
 Start the live preview watcher:
 
 ```bash
-npm run preview
 npm run watch:card -- cards/streamProfileCard.js
 ```
-
-The preview watcher regenerates `glizzboard-output.png` when card, test, or asset files change.
 
 ## Project layout
 
@@ -62,7 +86,8 @@ The preview watcher regenerates `glizzboard-output.png` when card, test, or asse
 assets/              Image assets used by cards
 cards/               Canvas card generators
 commands/            Slash command handlers
-database/            Game search persistence helpers
+database/            Feature-specific persistence helpers
+docs/                Project documentation
 events/              Discord event handlers
 gaming/              RAWG API and game embed helpers
 stats/               Server/user stat aggregation helpers
@@ -70,23 +95,16 @@ index.js             Bot entry point
 deploy-commands.js   Slash command deploy script
 ```
 
-## Notes
+See `docs/PROJECT_STRUCTURE.md` for the larger refactor plan.
 
-Keep `.env`, database files, logs, and `node_modules/` out of Git.
+## Development notes
 
-Local backup to my Drive
-$project = "E:\Discord Bot\Glizzanator-Bot"
-$backupRoot = "E:\Discord Bot\Backups"
-$stamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
-$backupName = "Glizzanator-Bot-Backup_$stamp"
-$backupFolder = Join-Path $backupRoot $backupName
-$backupZip = "$backupFolder.zip"
+Keep `.env`, database files, logs, backups, generated images, and `node_modules/` out of Git.
 
-New-Item -ItemType Directory -Force -Path $backupFolder | Out-Null
+Recommended local verification before pushing changes:
 
-robocopy $project $backupFolder /E /XD node_modules .git /R:1 /W:1
-
-Compress-Archive -Path "$backupFolder\*" -DestinationPath $backupZip -Force
-
-Write-Host "Backup created:"
-Write-Host $backupZip
+```bash
+npm install
+npm run deploy
+npm start
+```
