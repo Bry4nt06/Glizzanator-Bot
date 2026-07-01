@@ -1,0 +1,32 @@
+{
+  "port": 3001,
+  "defaultCard": "server",
+  "autoOpenBrowser": true,
+  "autoOpenConfig": true,
+  "editorCommand": "code",
+  "outputDir": "preview-output",
+  "cards": {
+    "server": {
+      "label": "Server Stats Card",
+      "modulePath": "cards/serverCard.js",
+      "outputName": "server-card-studio.png",
+      "enabled": true
+    },
+    "stream": {
+      "label": "Stream Alert Card",
+      "modulePath": "cards/streamProfileCard.js",
+      "outputName": "stream-alert-studio.png",
+      "enabled": true
+    }
+  },
+  "watch": [
+    "cards",
+    "assets",
+    "dev/card-studio"
+  ],
+  "notes": {
+    "sampleData": "Edit dev/card-studio/sampleData.js to change names, stats, channels, game data, and mock Discord users.",
+    "cardLayout": "Edit files in cards/ to change rendering code. The studio auto-refreshes after saves.",
+    "future": "Add new card definitions here when more cards are wired into Card Studio."
+  }
+}
