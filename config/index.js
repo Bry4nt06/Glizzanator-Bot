@@ -25,7 +25,11 @@ const config = {
         welcome: readEnv("WELCOME_CHANNEL_ID"),
         streamAlert: readEnv("STREAM_ALERT_CHANNEL_ID"),
         streamLog: readEnv("STREAM_LOG_CHANNEL_ID"),
-        botLog: readEnv("BOT_LOG_CHANNEL_ID")
+        botLog: readEnv("BOT_LOG_CHANNEL_ID"),
+        activityLog: readEnv("ACTIVITY_LOG_CHANNEL_ID"),
+        errorLog: readEnv("ERROR_LOG_CHANNEL_ID"),
+        musicLog: readEnv("MUSIC_LOG_CHANNEL_ID"),
+        adminLog: readEnv("ADMIN_LOG_CHANNEL_ID")
     },
     features: {
         welcomeNickname: readBooleanEnv("ENABLE_WELCOME_NICKNAME", false),
