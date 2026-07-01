@@ -1,6 +1,6 @@
 {
   "name": "glizzanator-bot",
-  "version": "2.4.0-refactor-foundation",
+  "version": "2.4.1-incremental-cleanup",
   "description": "High Society Discord bot with stats cards, game lookups, RAWG Glizzboard, activity tracking, and future music-player foundations.",
   "main": "index.js",
   "scripts": {
