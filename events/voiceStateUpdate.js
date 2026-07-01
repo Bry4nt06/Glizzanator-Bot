@@ -1,7 +1,6 @@
 const { createStreamProfileCard } = require("../cards/streamProfileCard");
 const { sendLatestCard } = require("../commands/utility/cardMessageManager");
-const VoiceTrackingService = require("../services/VoiceTrackingService");
-const StreamTrackingService = require("../services/StreamTrackingService");
+const { VoiceTrackingService, StreamTrackingService } = require("../services");
 const logger = require("../utils/logger");
 
 function getStreamAlertChannel(guild) {
