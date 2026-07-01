@@ -1,8 +1,8 @@
-const messageTracking = require("../services/MessageTrackingService");
+const { MessageTrackingService } = require("../services");
 
 function registerMessageCreateEvent(client, db) {
     client.on("messageCreate", (message) => {
-        messageTracking.track(db, message);
+        MessageTrackingService.track(db, message);
     });
 }
 
