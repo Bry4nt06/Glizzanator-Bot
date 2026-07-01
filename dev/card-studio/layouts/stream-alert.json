@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "name": "Stream Alert Card",
+    "description": "Visual controls for the stream alert card. Values are used by Card Studio and can later be wired into the renderer."
+  },
+  "card": {
+    "width": 900,
+    "height": 360,
+    "cornerRadius": 30,
+    "borderWidth": 5,
+    "borderColor": "#f6c453",
+    "backgroundColor": "#0b0b0b",
+    "accentColor": "#f6c453"
+  },
+  "avatar": {
+    "size": 196,
+    "x": 60,
+    "y": 81,
+    "borderWidth": 5,
+    "borderColor": "#f6c453"
+  },
+  "text": {
+    "header": { "x": 285, "y": 60, "text": "NOW STREAMING", "fontSize": 34, "color": "#f6c453" },
+    "username": { "x": 285, "y": 104, "maxSize": 34, "minSize": 16, "color": "#d0d4dc", "bold": true },
+    "displayName": { "x": 285, "y": 154, "maxSize": 56, "minSize": 24, "color": "#ffffff", "bold": true }
+  },
+  "live": {
+    "enabled": true,
+    "x": 285,
+    "y": 74,
+    "text": "LIVE",
+    "dotSize": 8,
+    "paddingX": 14,
+    "paddingY": 7,
+    "textColor": "#ffffff",
+    "badgeColor": "#ef2b2d"
+  },
+  "infoBoxes": {
+    "backgroundColor": "rgba(17, 24, 32, 0.92)",
+    "borderColor": "rgba(255,255,255,0.12)",
+    "textColor": "#e9edf5",
+    "iconColor": "#f6c453",
+    "fontSize": 22,
+    "x": 285,
+    "firstY": 185,
+    "secondY": 242,
+    "channelWidth": 300,
+    "timeWidth": 230,
+    "height": 46,
+    "spacing": 11
+  }
+}

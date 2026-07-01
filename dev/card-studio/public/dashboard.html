@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Glizzanator Card Studio</title>
+  <link rel="stylesheet" href="/public/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Glizzanator Card Studio</h1>
+      <p>Visual card dashboard with live preview, controls, upload support, and JSON-backed layouts.</p>
+    </div>
+    <div class="top-actions">
+      <button id="renderButton">Regenerate</button>
+      <button id="saveLayoutButton">Save Layout</button>
+      <button id="saveDataButton">Save Data</button>
+    </div>
+  </header>
+
+  <main class="studio-shell">
+    <aside class="sidebar">
+      <h2>Cards</h2>
+      <div id="cardList" class="card-list"></div>
+
+      <div class="status-box">
+        <div><span class="live-dot"></span><strong>Studio Running</strong></div>
+        <div id="statusText">Loading...</div>
+      </div>
+
+      <label class="toggle-row">
+        <input id="guideToggle" type="checkbox" checked />
+        Show layout guides
+      </label>
+    </aside>
+
+    <section class="preview-panel">
+      <div class="preview-header">
+        <h2 id="previewTitle">Preview</h2>
+        <span id="updatedAt">Not rendered yet</span>
+      </div>
+      <div class="preview-stage" id="previewStage">
+        <img id="previewImage" alt="Card preview" />
+        <div id="guideOverlay" class="guide-overlay"></div>
+      </div>
+    </section>
+
+    <section class="controls-panel">
+      <nav class="tabs">
+        <button class="tab active" data-tab="quick">Quick Edit</button>
+        <button class="tab" data-tab="layout">Layout JSON</button>
+        <button class="tab" data-tab="data">Sample Data</button>
+        <button class="tab" data-tab="uploads">Uploads</button>
+      </nav>
+
+      <div class="tab-panel active" id="tab-quick">
+        <h2>Visual Controls</h2>
+        <div id="quickControls" class="control-grid"></div>
+      </div>
+
+      <div class="tab-panel" id="tab-layout">
+        <h2>Layout JSON</h2>
+        <textarea id="layoutEditor" spellcheck="false"></textarea>
+      </div>
+
+      <div class="tab-panel" id="tab-data">
+        <h2>Sample Data JSON</h2>
+        <textarea id="dataEditor" spellcheck="false"></textarea>
+      </div>
+
+      <div class="tab-panel" id="tab-uploads">
+        <h2>Upload Assets</h2>
+        <p class="muted">Upload backgrounds, avatars, logos, and test images. The saved path can be copied into sample data or future layout files.</p>
+        <input id="assetUpload" type="file" accept="image/png,image/jpeg,image/webp" />
+        <div id="uploadResult" class="upload-result"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/public/app.js"></script>
+</body>
+</html>

@@ -2,26 +2,87 @@ const fs = require("fs");
 const http = require("http");
 const path = require("path");
 const { URL } = require("url");
-const { samples } = require("./sampleData");
+const { getEnabledCards, getOutputDir, loadStudioConfig, readJson, resolveProjectPath, writeJson } = require("./config");
+const sampleDataModule = require("./sampleData");
 
-const projectRoot = path.resolve(__dirname, "..", "..");
-const outputDir = path.join(projectRoot, "preview-output");
-const defaultPort = Number(process.env.CARD_STUDIO_PORT || 3001);
+function layoutToStreamOptions(layout = {}) {
+    if (!layout.card) return {};
 
-const cardDefinitions = {
-    server: {
-        label: "Server Stats Card",
-        modulePath: path.join(projectRoot, "cards", "serverCard.js"),
-        outputName: "server-card-studio.png",
-        render: async (cardModule) => cardModule.createStatsCard(samples.server)
-    },
-    stream: {
-        label: "Stream Alert Card",
-        modulePath: path.join(projectRoot, "cards", "streamProfileCard.js"),
-        outputName: "stream-alert-studio.png",
-        render: async (cardModule) => cardModule.createStreamProfileCard(samples.stream)
-    }
-};
+    const avatarSize = Number(layout.avatar?.size || 196);
+    const avatarRadius = avatarSize / 2;
+
+    return {
+        width: Number(layout.card.width || 900),
+        height: Number(layout.card.height || 360),
+        colors: {
+            backgroundStart: layout.card.backgroundColor || "#180f07",
+            backgroundMiddle: "#000000",
+            backgroundEnd: "#040402",
+            gold: layout.card.accentColor || "#f6c453",
+            white: layout.text?.displayName?.color || "#ffffff",
+            muted: layout.text?.username?.color || "#d0d4dc",
+            pillBackground: layout.infoBoxes?.backgroundColor || "rgba(17, 24, 32, 0.92)",
+            pillBorder: layout.infoBoxes?.borderColor || "rgba(255,255,255,0.12)",
+            liveRed: layout.live?.badgeColor || "#ef2b2d"
+        },
+        border: {
+            outerX: 18,
+            outerY: 18,
+            outerRadius: Number(layout.card.cornerRadius || 30),
+            outerWidth: Number(layout.card.borderWidth || 5),
+            innerX: 28,
+            innerY: 28,
+            innerRadius: Math.max(0, Number(layout.card.cornerRadius || 30) - 4),
+            innerWidth: 2
+        },
+        avatar: {
+            centerX: Number(layout.avatar?.x || 60) + avatarRadius,
+            centerY: Number(layout.avatar?.y || 81) + avatarRadius,
+            radius: avatarRadius,
+            borderWidth: Number(layout.avatar?.borderWidth || 5)
+        },
+        text: {
+            x: Number(layout.text?.username?.x || layout.text?.header?.x || 285),
+            maxWidth: Number(layout.text?.maxWidth || 560),
+            headerY: Number(layout.text?.header?.y || 60),
+            usernameY: Number(layout.text?.username?.y || 104),
+            displayNameY: Number(layout.text?.displayName?.y || 154),
+            usernameMaxSize: Number(layout.text?.username?.maxSize || 34),
+            usernameMinSize: Number(layout.text?.username?.minSize || 16),
+            displayNameMaxSize: Number(layout.text?.displayName?.maxSize || 56),
+            displayNameMinSize: Number(layout.text?.displayName?.minSize || 24)
+        },
+        live: {
+            enabled: layout.live?.enabled !== false,
+            x: Number(layout.live?.x || 285),
+            y: Number(layout.live?.y || 74),
+            height: 36,
+            radius: 10,
+            paddingX: Number(layout.live?.paddingX || 14),
+            dotRadius: Number(layout.live?.dotSize || 8),
+            text: layout.live?.text || "LIVE"
+        },
+        pills: {
+            x: Number(layout.infoBoxes?.x || 285),
+            firstY: Number(layout.infoBoxes?.firstY || 185),
+            secondY: Number(layout.infoBoxes?.secondY || 242),
+            channelWidth: Number(layout.infoBoxes?.channelWidth || 300),
+            timeWidth: Number(layout.infoBoxes?.timeWidth || 230),
+            channelHeight: Number(layout.infoBoxes?.height || 46),
+            timeHeight: Number(layout.infoBoxes?.height || 42),
+            radius: 12,
+            fontSize: Number(layout.infoBoxes?.fontSize || 22),
+            iconColor: layout.infoBoxes?.iconColor || layout.card.accentColor || "#f6c453"
+        }
+    };
+}
+
+const config = loadStudioConfig();
+const projectRoot = resolveProjectPath(".");
+const publicDir = path.join(__dirname, "public");
+const uploadDir = path.join(__dirname, "uploads");
+const outputDir = getOutputDir(config);
+const defaultPort = Number(process.env.CARD_STUDIO_PORT || config.port || 3001);
 
 let clients = [];
 let lastBuild = {
@@ -29,6 +90,32 @@ let lastBuild = {
     ok: true,
     message: "Waiting for first render."
 };
+
+function getCardDefinitions() {
+    const cards = getEnabledCards(loadStudioConfig());
+
+    for (const [key, card] of Object.entries(cards)) {
+        card.render = async (cardModule) => {
+            delete require.cache[require.resolve("./sampleData")];
+            const freshSamples = require("./sampleData").samples;
+
+            if (key === "server") {
+                return cardModule.createStatsCard(freshSamples.server);
+            }
+
+            if (key === "stream") {
+                return cardModule.createStreamProfileCard({
+                ...freshSamples.stream,
+                options: layoutToStreamOptions(getLayout("stream"))
+            });
+            }
+
+            throw new Error(`No Studio renderer wired for card: ${key}`);
+        };
+    }
+
+    return cards;
+}
 
 function clearModule(modulePath) {
     try {
@@ -39,11 +126,15 @@ function clearModule(modulePath) {
 }
 
 async function renderCard(cardKey) {
-    const definition = cardDefinitions[cardKey] || cardDefinitions.server;
+    const definitions = getCardDefinitions();
+    const definition = definitions[cardKey] || definitions[loadStudioConfig().defaultCard] || Object.values(definitions)[0];
+
+    if (!definition) {
+        throw new Error("No cards are enabled in Card Studio config.");
+    }
 
     fs.mkdirSync(outputDir, { recursive: true });
     clearModule(definition.modulePath);
-    clearModule(path.join(__dirname, "sampleData.js"));
 
     const cardModule = require(definition.modulePath);
     const buffer = await definition.render(cardModule);
@@ -56,7 +147,7 @@ async function renderCard(cardKey) {
     fs.writeFileSync(outputPath, buffer);
 
     lastBuild = {
-        card: cardKey,
+        card: definition.key,
         ok: true,
         message: `Rendered ${definition.label}`,
         outputName: definition.outputName,
@@ -72,249 +163,18 @@ function notifyClients() {
     clients.forEach((res) => res.write(payload));
 }
 
-function renderHome() {
-    const cards = Object.entries(cardDefinitions)
-        .map(([key, definition]) => {
-            return `<button class="card-button" data-card="${key}">${definition.label}</button>`;
-        })
-        .join("\n");
+function readBody(req) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        req.on("data", (chunk) => chunks.push(chunk));
+        req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+        req.on("error", reject);
+    });
+}
 
-    return `<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Glizzanator Card Studio</title>
-    <style>
-        :root {
-            --bg: #050608;
-            --panel: #0d1118;
-            --panel-2: #151a22;
-            --gold: #f6c453;
-            --text: #f4f6fb;
-            --muted: #aeb6c4;
-            --red: #ef2b2d;
-        }
-
-        * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            min-height: 100vh;
-            font-family: Arial, sans-serif;
-            background: radial-gradient(circle at top, #211507 0, var(--bg) 42%, #000 100%);
-            color: var(--text);
-        }
-
-        header {
-            padding: 24px 32px 12px;
-            border-bottom: 1px solid rgba(246,196,83,0.25);
-        }
-
-        h1 {
-            margin: 0;
-            color: var(--gold);
-            font-size: 34px;
-        }
-
-        .subtitle {
-            margin-top: 6px;
-            color: var(--muted);
-        }
-
-        main {
-            display: grid;
-            grid-template-columns: 280px minmax(0, 1fr);
-            gap: 22px;
-            padding: 24px 32px 32px;
-        }
-
-        aside, .preview-panel, .notes {
-            background: rgba(13, 17, 24, 0.92);
-            border: 1px solid rgba(246,196,83,0.25);
-            border-radius: 16px;
-            box-shadow: 0 0 28px rgba(0,0,0,0.45);
-        }
-
-        aside {
-            padding: 18px;
-            height: fit-content;
-        }
-
-        .card-button {
-            width: 100%;
-            display: block;
-            margin-bottom: 12px;
-            padding: 13px 14px;
-            border: 1px solid rgba(246,196,83,0.35);
-            border-radius: 10px;
-            background: var(--panel-2);
-            color: var(--text);
-            text-align: left;
-            font-size: 15px;
-            cursor: pointer;
-        }
-
-        .card-button.active,
-        .card-button:hover {
-            border-color: var(--gold);
-            color: var(--gold);
-        }
-
-        .status {
-            margin-top: 18px;
-            padding: 12px;
-            border-radius: 10px;
-            background: #070a10;
-            color: var(--muted);
-            font-size: 13px;
-            line-height: 1.35;
-        }
-
-        .status strong { color: var(--gold); }
-        .status .live-dot {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            margin-right: 7px;
-            border-radius: 50%;
-            background: var(--red);
-            box-shadow: 0 0 10px var(--red);
-        }
-
-        .preview-panel {
-            padding: 22px;
-            overflow: auto;
-        }
-
-        .preview-toolbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 16px;
-            margin-bottom: 18px;
-        }
-
-        .preview-title {
-            font-size: 20px;
-            color: var(--gold);
-            font-weight: bold;
-        }
-
-        .refresh-button {
-            border: 1px solid rgba(246,196,83,0.45);
-            border-radius: 10px;
-            padding: 10px 14px;
-            background: #10151d;
-            color: var(--text);
-            cursor: pointer;
-        }
-
-        .image-wrap {
-            background: #000;
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 12px;
-            padding: 18px;
-            text-align: center;
-        }
-
-        img {
-            max-width: 100%;
-            height: auto;
-            display: inline-block;
-        }
-
-        .notes {
-            grid-column: 1 / -1;
-            padding: 18px 22px;
-            color: var(--muted);
-            line-height: 1.5;
-        }
-
-        code {
-            color: var(--gold);
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>Glizzanator Card Studio</h1>
-        <div class="subtitle">Live browser preview for Discord cards. Save a card file and this page refreshes automatically.</div>
-    </header>
-
-    <main>
-        <aside>
-            ${cards}
-            <div class="status">
-                <div><span class="live-dot"></span><strong>Studio running</strong></div>
-                <div id="build-status">Waiting for render...</div>
-            </div>
-        </aside>
-
-        <section class="preview-panel">
-            <div class="preview-toolbar">
-                <div class="preview-title" id="preview-title">Server Stats Card</div>
-                <button class="refresh-button" id="refresh-button">Regenerate</button>
-            </div>
-            <div class="image-wrap">
-                <img id="preview-image" alt="Card preview" />
-            </div>
-        </section>
-
-        <section class="notes">
-            <strong>Customize sample data:</strong> edit <code>dev/card-studio/sampleData.js</code>.<br />
-            <strong>Customize card layout:</strong> edit files in <code>cards/</code>. The studio regenerates previews on save.
-        </section>
-    </main>
-
-    <script>
-        const buttons = [...document.querySelectorAll(".card-button")];
-        const img = document.getElementById("preview-image");
-        const title = document.getElementById("preview-title");
-        const status = document.getElementById("build-status");
-        const refreshButton = document.getElementById("refresh-button");
-        let selectedCard = localStorage.getItem("cardStudio.card") || "server";
-
-        function setActive(card) {
-            selectedCard = card;
-            localStorage.setItem("cardStudio.card", card);
-            buttons.forEach((button) => button.classList.toggle("active", button.dataset.card === card));
-            title.textContent = buttons.find((button) => button.dataset.card === card)?.textContent || "Card Preview";
-        }
-
-        async function render(card = selectedCard) {
-            setActive(card);
-            status.textContent = "Rendering...";
-            const response = await fetch(`/render?card=${card}&t=${Date.now()}`);
-            const data = await response.json();
-
-            if (!data.ok) {
-                status.textContent = data.error || "Render failed.";
-                return;
-            }
-
-            img.src = `/image/${data.outputName}?t=${Date.now()}`;
-            status.textContent = `${data.message} at ${new Date().toLocaleTimeString()}`;
-        }
-
-        buttons.forEach((button) => {
-            button.addEventListener("click", () => render(button.dataset.card));
-        });
-
-        refreshButton.addEventListener("click", () => render());
-
-        const events = new EventSource("/events");
-        events.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.card === selectedCard && data.outputName) {
-                img.src = `/image/${data.outputName}?t=${Date.now()}`;
-                status.textContent = `${data.message} at ${new Date().toLocaleTimeString()}`;
-            }
-        };
-
-        render(selectedCard);
-    </script>
-</body>
-</html>`;
+async function readJsonBody(req) {
+    const body = await readBody(req);
+    return body ? JSON.parse(body) : {};
 }
 
 function sendJson(res, statusCode, data) {
@@ -322,7 +182,7 @@ function sendJson(res, statusCode, data) {
     res.end(JSON.stringify(data));
 }
 
-function sendFile(res, filePath) {
+function sendFile(res, filePath, contentType = "application/octet-stream") {
     if (!fs.existsSync(filePath)) {
         res.writeHead(404, { "Content-Type": "text/plain" });
         res.end("Not found");
@@ -330,75 +190,195 @@ function sendFile(res, filePath) {
     }
 
     res.writeHead(200, {
-        "Content-Type": "image/png",
+        "Content-Type": contentType,
         "Cache-Control": "no-store"
     });
     fs.createReadStream(filePath).pipe(res);
 }
 
+function getContentType(filePath) {
+    if (filePath.endsWith(".html")) return "text/html";
+    if (filePath.endsWith(".css")) return "text/css";
+    if (filePath.endsWith(".js")) return "application/javascript";
+    if (filePath.endsWith(".png")) return "image/png";
+    if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) return "image/jpeg";
+    if (filePath.endsWith(".webp")) return "image/webp";
+    return "application/octet-stream";
+}
+
+function getLayout(cardKey) {
+    const definition = getCardDefinitions()[cardKey];
+    if (!definition?.layoutPath) return {};
+    return readJson(definition.layoutPath, {});
+}
+
+function saveLayout(cardKey, layout) {
+    const definition = getCardDefinitions()[cardKey];
+    if (!definition?.layoutPath) {
+        throw new Error(`No layout JSON configured for ${cardKey}`);
+    }
+
+    writeJson(definition.layoutPath, layout);
+}
+
+function safeUploadName(name) {
+    return String(name || "upload.png")
+        .replace(/[^a-z0-9._-]/gi, "-")
+        .replace(/-+/g, "-")
+        .slice(0, 80);
+}
+
+async function handleUpload(req, res) {
+    const data = await readJsonBody(req);
+
+    if (!data.dataUrl || !String(data.dataUrl).startsWith("data:")) {
+        sendJson(res, 400, { ok: false, error: "Expected dataUrl." });
+        return;
+    }
+
+    const [, meta, base64] = String(data.dataUrl).match(/^data:([^;]+);base64,(.+)$/) || [];
+    if (!meta || !base64) {
+        sendJson(res, 400, { ok: false, error: "Invalid dataUrl." });
+        return;
+    }
+
+    const ext = meta.includes("jpeg") ? ".jpg" : meta.includes("webp") ? ".webp" : ".png";
+    const fileName = `${Date.now()}-${safeUploadName(data.fileName || `upload${ext}`)}`;
+    const finalName = path.extname(fileName) ? fileName : `${fileName}${ext}`;
+    const filePath = path.join(uploadDir, finalName);
+
+    fs.mkdirSync(uploadDir, { recursive: true });
+    fs.writeFileSync(filePath, Buffer.from(base64, "base64"));
+
+    const relativePath = path.relative(projectRoot, filePath).replace(/\\/g, "/");
+    sendJson(res, 200, {
+        ok: true,
+        path: relativePath,
+        url: `/uploads/${finalName}`
+    });
+}
+
 const server = http.createServer(async (req, res) => {
     const requestUrl = new URL(req.url, `http://${req.headers.host}`);
 
-    if (requestUrl.pathname === "/") {
-        res.writeHead(200, { "Content-Type": "text/html" });
-        res.end(renderHome());
-        return;
-    }
+    try {
+        if (requestUrl.pathname === "/") {
+            sendFile(res, path.join(publicDir, "dashboard.html"), "text/html");
+            return;
+        }
 
-    if (requestUrl.pathname === "/events") {
-        res.writeHead(200, {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive"
-        });
-        res.write(`data: ${JSON.stringify(lastBuild)}\n\n`);
-        clients.push(res);
-        req.on("close", () => {
-            clients = clients.filter((client) => client !== res);
-        });
-        return;
-    }
+        if (requestUrl.pathname.startsWith("/public/")) {
+            const fileName = path.basename(requestUrl.pathname.replace("/public/", ""));
+            const filePath = path.join(publicDir, fileName);
+            sendFile(res, filePath, getContentType(filePath));
+            return;
+        }
 
-    if (requestUrl.pathname === "/render") {
-        const card = requestUrl.searchParams.get("card") || "server";
+        if (requestUrl.pathname.startsWith("/uploads/")) {
+            const fileName = path.basename(requestUrl.pathname.replace("/uploads/", ""));
+            const filePath = path.join(uploadDir, fileName);
+            sendFile(res, filePath, getContentType(filePath));
+            return;
+        }
 
-        try {
+        if (requestUrl.pathname === "/events") {
+            res.writeHead(200, {
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive"
+            });
+            res.write(`data: ${JSON.stringify(lastBuild)}\n\n`);
+            clients.push(res);
+            req.on("close", () => {
+                clients = clients.filter((client) => client !== res);
+            });
+            return;
+        }
+
+        if (requestUrl.pathname === "/api/studio") {
+            sendJson(res, 200, {
+                ok: true,
+                config: loadStudioConfig(),
+                cards: getCardDefinitions(),
+                sampleData: sampleDataModule.readSampleData(),
+                lastBuild
+            });
+            return;
+        }
+
+        if (requestUrl.pathname === "/api/layout") {
+            const card = requestUrl.searchParams.get("card") || loadStudioConfig().defaultCard;
+
+            if (req.method === "GET") {
+                sendJson(res, 200, { ok: true, card, layout: getLayout(card) });
+                return;
+            }
+
+            if (req.method === "POST") {
+                const body = await readJsonBody(req);
+                saveLayout(card, body.layout || {});
+                sendJson(res, 200, { ok: true, card, layout: getLayout(card) });
+                return;
+            }
+        }
+
+        if (requestUrl.pathname === "/api/sample-data") {
+            if (req.method === "GET") {
+                sendJson(res, 200, { ok: true, sampleData: sampleDataModule.readSampleData() });
+                return;
+            }
+
+            if (req.method === "POST") {
+                const body = await readJsonBody(req);
+                writeJson(sampleDataModule.sampleDataPath, body.sampleData || {});
+                sendJson(res, 200, { ok: true, sampleData: sampleDataModule.readSampleData() });
+                return;
+            }
+        }
+
+        if (requestUrl.pathname === "/api/upload" && req.method === "POST") {
+            await handleUpload(req, res);
+            return;
+        }
+
+        if (requestUrl.pathname === "/render") {
+            const card = requestUrl.searchParams.get("card") || loadStudioConfig().defaultCard;
             const result = await renderCard(card);
             sendJson(res, 200, {
                 ok: true,
                 message: lastBuild.message,
                 outputName: result.definition.outputName
             });
-        } catch (error) {
-            lastBuild = {
-                card,
-                ok: false,
-                message: error.message,
-                updatedAt: new Date().toISOString()
-            };
-            notifyClients();
-            sendJson(res, 500, { ok: false, error: error.message });
+            return;
         }
-        return;
-    }
 
-    if (requestUrl.pathname.startsWith("/image/")) {
-        const outputName = path.basename(requestUrl.pathname.replace("/image/", ""));
-        sendFile(res, path.join(outputDir, outputName));
-        return;
-    }
+        if (requestUrl.pathname.startsWith("/image/")) {
+            const outputName = path.basename(requestUrl.pathname.replace("/image/", ""));
+            sendFile(res, path.join(outputDir, outputName), "image/png");
+            return;
+        }
 
-    res.writeHead(404, { "Content-Type": "text/plain" });
-    res.end("Not found");
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Not found");
+    } catch (error) {
+        lastBuild = {
+            card: requestUrl.searchParams.get("card") || lastBuild.card || loadStudioConfig().defaultCard,
+            ok: false,
+            message: error.message,
+            updatedAt: new Date().toISOString()
+        };
+        notifyClients();
+        sendJson(res, 500, { ok: false, error: error.message });
+    }
 });
 
 function watchTarget(targetPath) {
     if (!fs.existsSync(targetPath)) return;
 
     fs.watch(targetPath, { recursive: false }, () => {
-        renderCard(lastBuild.card || "server").catch((error) => {
+        renderCard(lastBuild.card || loadStudioConfig().defaultCard).catch((error) => {
             lastBuild = {
-                card: lastBuild.card || "server",
+                card: lastBuild.card || loadStudioConfig().defaultCard,
                 ok: false,
                 message: error.message,
                 updatedAt: new Date().toISOString()
@@ -408,15 +388,16 @@ function watchTarget(targetPath) {
     });
 }
 
-watchTarget(path.join(projectRoot, "cards"));
-watchTarget(path.join(projectRoot, "assets"));
-watchTarget(__dirname);
+for (const target of loadStudioConfig().watch || []) {
+    watchTarget(resolveProjectPath(target));
+}
 
 server.listen(defaultPort, () => {
+    const defaultCard = loadStudioConfig().defaultCard || "server";
     console.log(`Glizzanator Card Studio running at http://localhost:${defaultPort}`);
-    renderCard("server").catch((error) => {
+    renderCard(defaultCard).catch((error) => {
         lastBuild = {
-            card: "server",
+            card: defaultCard,
             ok: false,
             message: error.message,
             updatedAt: new Date().toISOString()

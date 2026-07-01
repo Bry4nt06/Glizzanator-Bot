@@ -1,0 +1,156 @@
+:root {
+  --bg: #050608;
+  --panel: rgba(13, 17, 24, 0.94);
+  --panel-2: rgba(21, 26, 34, 0.96);
+  --gold: #f6c453;
+  --text: #f4f6fb;
+  --muted: #aeb6c4;
+  --red: #ef2b2d;
+  --line: rgba(246, 196, 83, 0.25);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: Arial, sans-serif;
+  background: radial-gradient(circle at top, #261706 0, var(--bg) 45%, #000 100%);
+  color: var(--text);
+}
+
+button, input, textarea, select { font: inherit; }
+button {
+  border: 1px solid rgba(246,196,83,0.45);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #111720;
+  color: var(--text);
+  cursor: pointer;
+}
+button:hover, button.active { border-color: var(--gold); color: var(--gold); }
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  padding: 22px 28px;
+  border-bottom: 1px solid var(--line);
+}
+.topbar h1 { margin: 0; color: var(--gold); font-size: 32px; }
+.topbar p { margin: 6px 0 0; color: var(--muted); }
+.top-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.studio-shell {
+  display: grid;
+  grid-template-columns: 260px minmax(520px, 1fr) 430px;
+  gap: 18px;
+  padding: 20px;
+}
+
+.sidebar, .preview-panel, .controls-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 0 28px rgba(0,0,0,0.45);
+}
+.sidebar { padding: 18px; height: fit-content; }
+.sidebar h2, .controls-panel h2 { margin: 0 0 14px; color: var(--gold); }
+.card-list { display: grid; gap: 10px; }
+.card-button { width: 100%; text-align: left; }
+
+.status-box {
+  margin-top: 18px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #070a10;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.live-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 10px var(--red);
+}
+.toggle-row { display: flex; gap: 8px; margin-top: 14px; color: var(--muted); }
+
+.preview-panel { padding: 18px; overflow: auto; }
+.preview-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.preview-header h2 { margin: 0; color: var(--gold); }
+.preview-header span { color: var(--muted); font-size: 13px; }
+.preview-stage {
+  position: relative;
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  background: #000;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 18px;
+  overflow: auto;
+}
+.preview-stage img { max-width: 100%; height: auto; display: block; }
+.guide-overlay {
+  pointer-events: none;
+  position: absolute;
+  inset: 18px;
+  display: none;
+  background-image:
+    linear-gradient(rgba(246,196,83,0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(246,196,83,0.14) 1px, transparent 1px);
+  background-size: 40px 40px;
+  border: 1px dashed rgba(246,196,83,0.45);
+}
+.guide-overlay.visible { display: block; }
+
+.controls-panel { padding: 0; overflow: hidden; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+.tab { border: 0; border-right: 1px solid rgba(246,196,83,0.18); border-radius: 0; background: #0b0f15; }
+.tab-panel { display: none; padding: 18px; }
+.tab-panel.active { display: block; }
+
+.control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.control-group {
+  padding: 12px;
+  background: var(--panel-2);
+  border: 1px solid rgba(246,196,83,0.18);
+  border-radius: 12px;
+}
+.control-group.full { grid-column: 1 / -1; }
+.control-group h3 { margin: 0 0 10px; color: var(--gold); font-size: 15px; }
+.field { display: grid; gap: 5px; margin-bottom: 10px; }
+.field label { color: var(--muted); font-size: 12px; }
+.field input, .field select {
+  width: 100%;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 8px;
+  background: #070a10;
+  color: var(--text);
+}
+.field input[type="color"] { height: 38px; padding: 3px; }
+
+textarea {
+  width: 100%;
+  min-height: 520px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 12px;
+  background: #06080c;
+  color: #dce3ef;
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.muted { color: var(--muted); line-height: 1.45; }
+.upload-result { margin-top: 14px; color: var(--muted); word-break: break-all; }
+
+@media (max-width: 1250px) {
+  .studio-shell { grid-template-columns: 230px 1fr; }
+  .controls-panel { grid-column: 1 / -1; }
+}

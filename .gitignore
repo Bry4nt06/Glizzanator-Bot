@@ -37,3 +37,8 @@ GoogleDrive Uploads/
 Thumbs.db
 .vscode/
 .idea/
+
+# Card Studio generated assets
+dev/card-studio/uploads/*
+!dev/card-studio/uploads/.gitkeep
+preview-output/

@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "name": "Server Stats Card",
+    "description": "Visual controls placeholder for the server stats dashboard card."
+  },
+  "card": {
+    "width": 1600,
+    "height": 900,
+    "accentColor": "#f6c453",
+    "backgroundColor": "#050608"
+  },
+  "topStreamer": {
+    "showDiscordUsername": true,
+    "showDisplayName": true,
+    "showPeriodLabel": false,
+    "usernameColor": "#aeb6c4",
+    "displayNameColor": "#f6c453"
+  }
+}
