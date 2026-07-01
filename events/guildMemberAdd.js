@@ -1,13 +1,14 @@
 const { AttachmentBuilder, ChannelType } = require("discord.js");
 const { createWelcomeCard } = require("../cards/welcomeCard");
 const { getRandomGlizzyName } = require("../commands/utility/glizzifyCommand");
+const logger = require("../utils/logger");
 
 function findFallbackWelcomeChannel(guild) {
-    return guild.channels.cache.find(channel => {
+    return guild.channels.cache.find((channel) => {
         if (channel.type !== ChannelType.GuildText) return false;
 
         const name = channel.name.toLowerCase();
-        return ["welcome", "Welcome", "lobby"].includes(name);
+        return ["welcome", "lobby"].includes(name);
     });
 }
 
@@ -21,7 +22,7 @@ function registerGuildMemberAddEvent(client) {
                     glizzyName,
                     "New member was glizzified on join"
                 ).catch((error) => {
-                    console.log(`Could not nickname ${member.user.tag}: ${error.message}`);
+                    logger.warn(`Could not nickname ${member.user.tag}`, { error: error.message });
                 });
             }
 
@@ -39,7 +40,7 @@ function registerGuildMemberAddEvent(client) {
                 findFallbackWelcomeChannel(member.guild);
 
             if (!channel) {
-                console.log("No welcome channel found. Set WELCOME_CHANNEL_ID in .env.");
+                logger.warn("No welcome channel found. Set WELCOME_CHANNEL_ID in .env.");
                 return;
             }
 
@@ -48,7 +49,7 @@ function registerGuildMemberAddEvent(client) {
                 files: [attachment]
             });
         } catch (error) {
-            console.error("guildMemberAdd welcome card error:", error);
+            logger.error("guildMemberAdd welcome card error", error);
         }
     });
 }
