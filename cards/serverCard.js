@@ -3,6 +3,7 @@ const path = require("path");
 const https = require("https");
 const http = require("http");
 const { roundRect } = require("./drawing");
+
 const W = 1600;
 const H = 900;
 
@@ -10,8 +11,6 @@ const assetCache = new Map();
 const remoteImageCache = new Map();
 
 async function createStatsCard(data) {
-    console.log("SERVER CARD FILE IS RUNNING");
-
     const canvas = createCanvas(W, H);
     const ctx = canvas.getContext("2d");
 
@@ -75,7 +74,6 @@ async function createStatsCard(data) {
         ctx.drawImage(monsterHotdog, 555, 14, 530, 455);
     }
 
-    // Bottom row: smaller music box + game activity box
     await drawMusicBox(ctx, 55, 645, 430, 175, data.music || {});
     await drawGameBox(ctx, 510, 645, 1035, 175, data.game || {});
 
@@ -91,9 +89,11 @@ async function createStatsCard(data) {
     if (crown) {
         ctx.drawImage(crown, 1008, 810, 70, 70);
     }
+
     if (hotdogHanging) {
         ctx.drawImage(hotdogHanging, 330, 630, 180, 225);
     }
+
     ctx.textAlign = "left";
 
     return canvas.toBuffer("image/png");
@@ -109,7 +109,7 @@ async function loadAsset(fileName) {
         assetCache.set(fileName, image);
         return image;
     } catch (err) {
-        console.log("Failed to load:", fileName, err.message);
+        console.warn("Failed to load asset", { fileName, error: err.message });
         return null;
     }
 }
@@ -138,48 +138,58 @@ async function drawStreamLookback(ctx, x, y, w, h, topStreamer) {
         ctx.fillStyle = "rgba(17, 24, 32, 0.92)";
         ctx.strokeStyle = "rgba(255,255,255,0.10)";
         ctx.lineWidth = 1;
-        roundRect(ctx, x + 35, y + 85, w - 70, 40, 8, true, true);
-        roundRect(ctx, x + 35, y + 134, w - 70, 40, 8, true, true);
+        roundRect(ctx, x + 35, y + 100, w - 70, 46, 8, true, true);
 
         ctx.fillStyle = "#f6c453";
         ctx.font = "24px Arial";
         ctx.textAlign = "center";
-        ctx.fillText("No streams tracked yet", x + w / 2, y + 112);
-
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(topStreamer?.periodLabel || "Total Stream Time", x + w / 2, y + 162);
+        ctx.fillText("No streams tracked yet", x + w / 2, y + 130);
         ctx.restore();
         return;
     }
 
-    const avatarSize = 76;
-    const avatarX = x + 38;
-    const avatarY = y + 82;
+    const avatarSize = 82;
+    const avatarX = x + 36;
+    const avatarY = y + 88;
+    const textX = x + 132;
+    const textWidth = w - 165;
+    const rowX = textX;
+    const rowW = textWidth;
+    const username = topStreamer.username.startsWith("@")
+        ? topStreamer.username
+        : `@${topStreamer.username}`;
+    const displayName = topStreamer.displayName || topStreamer.username;
 
     if (topStreamer.avatarURL) {
         await drawCircleImage(ctx, topStreamer.avatarURL, avatarX, avatarY, avatarSize);
     } else {
-        drawSmallRank(ctx, avatarX + 18, avatarY + 18, 1);
+        drawSmallRank(ctx, avatarX + 23, avatarY + 23, 1);
     }
 
-    ctx.fillStyle = "#f6c453";
-    ctx.font = "bold 22px Arial";
     ctx.textAlign = "left";
-    ctx.fillText(fitText(ctx, topStreamer.username, 225), x + 130, y + 112);
+    drawFittedText(ctx, username, textX, y + 100, textWidth, {
+        maxSize: 18,
+        minSize: 11,
+        weight: "bold",
+        color: "#aeb6c4"
+    });
+
+    drawFittedText(ctx, displayName, textX, y + 126, textWidth, {
+        maxSize: 24,
+        minSize: 13,
+        weight: "bold",
+        color: "#f6c453"
+    });
 
     ctx.fillStyle = "rgba(17, 24, 32, 0.92)";
     ctx.strokeStyle = "rgba(255,255,255,0.10)";
     ctx.lineWidth = 1;
-    roundRect(ctx, x + 130, y + 126, w - 165, 34, 7, true, true);
+    roundRect(ctx, rowX, y + 142, rowW, 36, 7, true, true);
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "23px Arial";
     ctx.textAlign = "center";
-    ctx.fillText(`${topStreamer.hours || 0} hrs streamed`, x + 130 + (w - 165) / 2, y + 151);
-
-    ctx.fillStyle = "#aeb6c4";
-    ctx.font = "19px Arial";
-    ctx.fillText(topStreamer.periodLabel || "Total Stream Time", x + w / 2, y + 182);
+    ctx.fillText(`${topStreamer.hours || 0} hrs streamed`, rowX + rowW / 2, y + 168);
 
     ctx.textAlign = "left";
     ctx.restore();
@@ -268,7 +278,7 @@ async function drawLeaderboard(ctx, x, y, w, h, title, lines, type) {
             ctx.fillStyle = "#ffffff";
             ctx.font = "25px Arial";
             ctx.textAlign = "left";
-            ctx.fillText(line.username || "Unknown", x + 95, rowY + 30);
+            ctx.fillText(fitText(ctx, line.username || "Unknown", w - 260), x + 95, rowY + 30);
 
             ctx.fillStyle = i === 0 ? "#f6c453" : "#b7bfd0";
             ctx.textAlign = "right";
@@ -285,7 +295,7 @@ async function drawLeaderboard(ctx, x, y, w, h, title, lines, type) {
             ctx.fillStyle = "#ffffff";
             ctx.font = "25px Arial";
             ctx.textAlign = "left";
-            ctx.fillText(name, x + 105, rowY + 30);
+            ctx.fillText(fitText(ctx, name, w - 245), x + 105, rowY + 30);
 
             ctx.fillStyle = i === 0 ? "#f6c453" : "#b7bfd0";
             ctx.textAlign = "right";
@@ -357,6 +367,7 @@ function cleanThumbnailUrl(url) {
 
     return url.split("?")[0];
 }
+
 function loadRemoteImage(url) {
     return new Promise((resolve, reject) => {
         const cleanUrl = cleanThumbnailUrl(url);
@@ -414,6 +425,7 @@ function loadRemoteImage(url) {
         request.on("error", reject);
     });
 }
+
 async function drawMusicBox(ctx, x, y, w, h, music = {}) {
     ctx.save();
 
@@ -436,29 +448,26 @@ async function drawMusicBox(ctx, x, y, w, h, music = {}) {
     ctx.lineWidth = 2;
     roundRect(ctx, artX, artY, artSize, artSize, 9, true, true);
 
-if (music.thumbnail) {
-    try {
-        const thumbnailUrl = cleanThumbnailUrl(music.thumbnail);
+    if (music.thumbnail) {
+        try {
+            const thumbnailUrl = cleanThumbnailUrl(music.thumbnail);
+            const art = thumbnailUrl.startsWith("http")
+                ? await loadRemoteImage(thumbnailUrl)
+                : await loadImage(thumbnailUrl);
 
-        console.log("Loading music thumbnail:", thumbnailUrl);
+            ctx.save();
+            roundRect(ctx, artX, artY, artSize, artSize, 9, false, false);
+            ctx.clip();
+            ctx.drawImage(art, artX, artY, artSize, artSize);
+            ctx.restore();
 
-        const art = thumbnailUrl.startsWith("http")
-            ? await loadRemoteImage(thumbnailUrl)
-            : await loadImage(thumbnailUrl);
-
-        ctx.save();
-        roundRect(ctx, artX, artY, artSize, artSize, 9, false, false);
-        ctx.clip();
-        ctx.drawImage(art, artX, artY, artSize, artSize);
-        ctx.restore();
-
-        ctx.strokeStyle = "rgba(246, 183, 45, 0.45)";
-        ctx.lineWidth = 2;
-        roundRect(ctx, artX, artY, artSize, artSize, 9, false, true);
-    } catch (err) {
-        console.log("Failed to load album art:", err.message);
+            ctx.strokeStyle = "rgba(246, 183, 45, 0.45)";
+            ctx.lineWidth = 2;
+            roundRect(ctx, artX, artY, artSize, artSize, 9, false, true);
+        } catch (err) {
+            console.warn("Failed to load album art", { error: err.message });
+        }
     }
-}
 
     const textX = artX + artSize + 22;
 
@@ -469,11 +478,7 @@ if (music.thumbnail) {
 
     ctx.fillStyle = "#c8ced8";
     ctx.font = "18px Arial";
-
-    const title = music.title || "Nothing playing yet";
-    const shortTitle = title.length > 23 ? `${title.slice(0, 23)}...` : title;
-
-    ctx.fillText(shortTitle, textX, y + 104);
+    ctx.fillText(fitText(ctx, music.title || "Nothing playing yet", 220), textX, y + 104);
 
     ctx.fillStyle = "#f6c453";
     ctx.font = "18px Arial";
@@ -494,6 +499,30 @@ if (music.thumbnail) {
     roundRect(ctx, barX, barY, fillW, barH, 5, true, false);
 
     ctx.restore();
+}
+
+function drawFittedText(ctx, text, x, y, maxWidth, options = {}) {
+    const {
+        maxSize = 24,
+        minSize = 12,
+        weight = "",
+        family = "Arial",
+        color = "#ffffff"
+    } = options;
+    const value = String(text || "");
+    let size = maxSize;
+
+    while (size > minSize) {
+        ctx.font = `${weight ? `${weight} ` : ""}${size}px ${family}`;
+        if (ctx.measureText(value).width <= maxWidth) break;
+        size--;
+    }
+
+    ctx.fillStyle = color;
+    ctx.font = `${weight ? `${weight} ` : ""}${size}px ${family}`;
+    ctx.fillText(value, x, y);
+
+    return size;
 }
 
 function fitText(ctx, text, maxWidth, fallback = "") {
@@ -535,25 +564,18 @@ async function drawGameBox(ctx, x, y, w, h, game = {}) {
     ctx.textAlign = "left";
     ctx.fillText("🎮 GAME ARTWORK", x + 35, y + 42);
 
-    const category = game.genre || game.label || "Newest Best Games Out Now";
     const topPick = game.topPick || game.name || "No game activity yet";
     const rating = game.rating || "N/A";
     const metacritic = game.metacritic || "N/A";
     const released = game.released || "N/A";
     const platforms = game.platforms || "Use /topgames to search";
-
-    // THIS is the top pick artwork source
     const artwork = game.thumbnail || game.image || game.previewThumbnail || null;
-
     const topThree = Array.isArray(game.topThreeGames) && game.topThreeGames.length
         ? game.topThreeGames.map(item => item?.name || String(item))
         : Array.isArray(game.topThree)
             ? game.topThree
             : [];
 
-    // =========================
-    // LEFT SIDE = TOP PICK ART
-    // =========================
     const artX = x + 93;
     const artY = y + 58;
     const artW = 205;
@@ -580,8 +602,7 @@ async function drawGameBox(ctx, x, y, w, h, game = {}) {
             ctx.lineWidth = 2;
             roundRect(ctx, artX, artY, artW, artH, 12, false, true);
         } catch (err) {
-            console.log("Failed to load top game artwork:", err.message);
-
+            console.warn("Failed to load top game artwork", { error: err.message });
             ctx.fillStyle = "#8b93a5";
             ctx.font = "46px Arial";
             ctx.fillText("🎮", artX + 75, artY + 60);
@@ -592,69 +613,61 @@ async function drawGameBox(ctx, x, y, w, h, game = {}) {
         ctx.fillText("🎮", artX + 75, artY + 60);
     }
 
-    // =========================
-// MIDDLE = TOP PICK DETAILS
-// =========================
-const midX = x + 375;       // moves the whole block right
-const detailsX = midX;      // shared left edge for all text
-const detailsWidth = 300;   // max width for truncation
+    const detailsX = x + 375;
+    const detailsWidth = 300;
 
-ctx.fillStyle = "#f6c453";
-ctx.font = "bold 21px Arial";
-ctx.fillText("🏆 TOP PICK", detailsX, y + 40);
+    ctx.fillStyle = "#f6c453";
+    ctx.font = "bold 21px Arial";
+    ctx.fillText("🏆 TOP PICK", detailsX, y + 40);
 
-ctx.fillStyle = "#ffffff";
-ctx.font = "bold 31px Arial";
-ctx.fillText(fitText(ctx, topPick, detailsWidth), detailsX, y + 91);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 31px Arial";
+    ctx.fillText(fitText(ctx, topPick, detailsWidth), detailsX, y + 91);
 
-ctx.fillStyle = "#c8ced8";
-ctx.font = "17px Arial";
-ctx.fillText(
-    fitText(ctx, `⭐ ${rating}   🟩 ${metacritic}   📅 ${released}`, detailsWidth),
-    detailsX,
-    y + 134
-);
+    ctx.fillStyle = "#c8ced8";
+    ctx.font = "17px Arial";
+    ctx.fillText(
+        fitText(ctx, `⭐ ${rating}   🟩 ${metacritic}   📅 ${released}`, detailsWidth),
+        detailsX,
+        y + 134
+    );
 
-ctx.fillStyle = "#8b93a5";
-ctx.font = "17px Arial";
-ctx.fillText(
-    fitText(ctx, `🎮 ${platforms}`, detailsWidth),
-    detailsX,
-    y + 158
-);
+    ctx.fillStyle = "#8b93a5";
+    ctx.font = "17px Arial";
+    ctx.fillText(
+        fitText(ctx, `🎮 ${platforms}`, detailsWidth),
+        detailsX,
+        y + 158
+    );
 
-// =========================
-// RIGHT SIDE = TOP 3
-// =========================
-const top3BoxX = x + 675;
-const top3BoxW = 350;
-const top3CenterX = top3BoxX + top3BoxW / 2;
+    const top3BoxX = x + 675;
+    const top3BoxW = 350;
+    const top3CenterX = top3BoxX + top3BoxW / 2;
 
-ctx.textAlign = "center";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#f6c453";
+    ctx.font = "bold 21px Arial";
+    ctx.fillText("TOP 3 RESULTS", top3CenterX, y + 40);
 
-ctx.fillStyle = "#f6c453";
-ctx.font = "bold 21px Arial";
-ctx.fillText("TOP 3 RESULTS", top3CenterX, y + 40);
+    ctx.fillStyle = "#c8ced8";
+    ctx.font = "20px Arial";
 
-ctx.fillStyle = "#c8ced8";
-ctx.font = "20px Arial";
+    if (topThree.length) {
+        topThree.slice(0, 3).forEach((name, index) => {
+            ctx.fillText(
+                `${index + 1}. ${fitText(ctx, name, 280)}`,
+                top3CenterX,
+                y + 88 + index * 25
+            );
+        });
+    } else {
+        ctx.fillText("1. Run /topgames", top3CenterX, y + 88);
+        ctx.fillText("2. Use /topgames horror", top3CenterX, y + 113);
+        ctx.fillText("3. Then run /serverstats", top3CenterX, y + 138);
+    }
 
-if (topThree.length) {
-    topThree.slice(0, 3).forEach((name, index) => {
-        ctx.fillText(
-            `${index + 1}. ${fitText(ctx, name, 280)}`,
-            top3CenterX,
-            y + 88 + index * 25
-        );
-    });
-} else {
-    ctx.fillText("1. Run /topgames", top3CenterX, y + 88);
-    ctx.fillText("2. Use /topgames horror", top3CenterX, y + 113);
-    ctx.fillText("3. Then run /serverstats", top3CenterX, y + 138);
-}
-
-ctx.textAlign = "left";
-ctx.restore();
+    ctx.textAlign = "left";
+    ctx.restore();
 }
 
 module.exports = { createStatsCard };
