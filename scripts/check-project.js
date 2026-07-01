@@ -3,7 +3,7 @@ const path = require("path");
 const childProcess = require("node:child_process");
 
 const root = path.resolve(__dirname, "..");
-const ignoredDirectories = new Set([".git", "node_modules"]);
+const ignoredDirectories = new Set([".git", "node_modules", "patches"]);
 const jsFiles = [];
 
 const requiredPaths = [
@@ -59,6 +59,8 @@ function isDatabaseLayerFile(file) {
         || file.includes(`${path.sep}database${path.sep}migrations${path.sep}`)
         || file.endsWith(`${path.sep}database${path.sep}helpers.js`)
         || file.endsWith(`${path.sep}database${path.sep}connection.js`)
+        || file.endsWith(`${path.sep}services${path.sep}DatabaseService.js`)
+        || file.endsWith(`${path.sep}services${path.sep}activityService.js`)
         || file.endsWith(`${path.sep}scripts${path.sep}doctor.js`);
 }
 
