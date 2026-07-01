@@ -42,6 +42,38 @@ async function closeOpenStreamSessionsAt(db, guildId, closeAt) {
     );
 }
 
+async function closeUserOpenVoiceSessionAt(db, guildId, userId, closeAt) {
+    await dbRun(
+        db,
+        `
+        UPDATE voice_sessions
+        SET
+            left_at = ?,
+            duration_seconds = MAX(0, CAST((? - joined_at) / 1000 AS INTEGER))
+        WHERE guild_id = ?
+        AND user_id = ?
+        AND left_at IS NULL
+        `,
+        [closeAt, closeAt, guildId, userId]
+    );
+}
+
+async function closeUserOpenStreamSessionAt(db, guildId, userId, closeAt) {
+    await dbRun(
+        db,
+        `
+        UPDATE stream_sessions
+        SET
+            ended_at = ?,
+            duration_seconds = MAX(0, CAST((? - started_at) / 1000 AS INTEGER))
+        WHERE guild_id = ?
+        AND user_id = ?
+        AND ended_at IS NULL
+        `,
+        [closeAt, closeAt, guildId, userId]
+    );
+}
+
 async function openCurrentVoiceSessions(db, guild) {
     const now = Date.now();
     const currentStates = guild.voiceStates.cache.filter((voiceState) => {
@@ -53,6 +85,8 @@ async function openCurrentVoiceSessions(db, guild) {
         const channel = voiceState.channel;
 
         if (!member || !channel) continue;
+
+        await closeUserOpenVoiceSessionAt(db, guild.id, member.id, now);
 
         await dbRun(
             db,
@@ -84,6 +118,8 @@ async function openCurrentStreamSessions(db, guild) {
         const channel = voiceState.channel;
 
         if (!member || !channel) continue;
+
+        await closeUserOpenStreamSessionAt(db, guild.id, member.id, now);
 
         await dbRun(
             db,
