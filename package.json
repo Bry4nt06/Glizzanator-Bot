@@ -9,10 +9,11 @@
     "check": "node scripts/check-project.js",
     "doctor": "node scripts/doctor.js",
     "apply:activity": "node scripts/apply-activity-adjustments.js",
-    "preview": "node preview-card.js",
-    "preview:card": "node preview-card.js",
-    "watch:card": "node watch-card.js",
-    "studio": "node dev/card-studio/server.js"
+    "preview": "npm run studio",
+    "preview:card": "npm run studio",
+    "watch:card": "npm run studio",
+    "studio": "node dev/card-studio/server.js",
+    "studio:open": "node dev/card-studio/open.js"
   },
   "engines": {
     "node": ">=18"
