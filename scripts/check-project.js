@@ -26,6 +26,24 @@ const requiredPaths = [
     "scripts/doctor.js"
 ];
 
+const forbiddenPatterns = [
+    {
+        label: "Legacy schema creation outside migrations",
+        pattern: "CREATE TABLE IF NOT EXISTS",
+        allowedPathIncludes: `${path.sep}database${path.sep}migrations${path.sep}`
+    },
+    {
+        label: "Legacy game search table registration",
+        pattern: "registerGameSearchTable",
+        allowedPathIncludes: null
+    },
+    {
+        label: "Legacy schema module import",
+        pattern: "./schema",
+        allowedPathIncludes: null
+    }
+];
+
 function walk(directory) {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
         if (ignoredDirectories.has(entry.name)) continue;
@@ -80,7 +98,37 @@ function checkLegacySchemaRemoved() {
     console.log("Legacy schema module removed.");
 }
 
+function checkForbiddenPatterns() {
+    const violations = [];
+
+    for (const file of jsFiles) {
+        const content = fs.readFileSync(file, "utf8");
+
+        for (const rule of forbiddenPatterns) {
+            if (!content.includes(rule.pattern)) continue;
+            if (rule.allowedPathIncludes && file.includes(rule.allowedPathIncludes)) continue;
+
+            violations.push({
+                file: path.relative(root, file),
+                label: rule.label,
+                pattern: rule.pattern
+            });
+        }
+    }
+
+    if (violations.length) {
+        console.error("Forbidden legacy patterns found:");
+        for (const violation of violations) {
+            console.error(`- ${violation.file}: ${violation.label} (${violation.pattern})`);
+        }
+        process.exit(1);
+    }
+
+    console.log("No forbidden legacy schema patterns found.");
+}
+
 walk(root);
 checkSyntax();
 checkRequiredFiles();
 checkLegacySchemaRemoved();
+checkForbiddenPatterns();
