@@ -1,13 +1,14 @@
 const { createStreamProfileCard } = require("../cards/streamProfileCard");
 const { sendLatestCard } = require("../commands/utility/cardMessageManager");
+const { config } = require("../config");
 const { VoiceTrackingService, StreamTrackingService } = require("../services");
 const logger = require("../utils/logger");
 
 function getStreamAlertChannel(guild) {
     const channelId =
-        process.env.STREAM_ALERT_CHANNEL_ID ||
-        process.env.STREAM_LOG_CHANNEL_ID ||
-        process.env.BOT_LOG_CHANNEL_ID;
+        config.channels.streamAlert ||
+        config.channels.streamLog ||
+        config.channels.botLog;
 
     if (!channelId) return null;
     return guild.channels.cache.get(channelId) || null;
