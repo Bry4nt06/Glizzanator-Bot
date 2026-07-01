@@ -1,21 +1,55 @@
 const { createUserStatsCard } = require("../../cards/userCard");
+const { dbGet } = require("../../database/helpers");
 const { getTimeWindows } = require("../../stats/timeWindows");
+const { overlapSecondsExpression } = require("../../stats/sqlExpressions");
 const { sendLatestCard } = require("../utility/cardMessageManager");
+const logger = require("../../utils/logger");
 
-function dbGet(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row || {})));
-    });
+async function getUserMessageStats(db, guildId, userId, windows) {
+    return dbGet(
+        db,
+        `
+        SELECT
+            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_1d,
+            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_7d,
+            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_30d,
+            COUNT(*) AS messages_total
+        FROM messages
+        WHERE user_id = ?
+        AND guild_id = ?
+        `,
+        [windows.oneDayAgo, windows.sevenDaysAgo, windows.thirtyDaysAgo, userId, guildId],
+        {}
+    );
 }
 
-function overlapSecondsExpression() {
-    return `
-        CASE
-            WHEN COALESCE(left_at, ?) <= ? THEN 0
-            WHEN joined_at >= ? THEN 0
-            ELSE CAST((MIN(COALESCE(left_at, ?), ?) - MAX(joined_at, ?)) / 1000 AS INTEGER)
-        END
-    `;
+async function getUserVoiceStats(db, guildId, userId, windows) {
+    return dbGet(
+        db,
+        `
+        SELECT
+            SUM(${overlapSecondsExpression()}) AS voice_1d,
+            SUM(${overlapSecondsExpression()}) AS voice_7d,
+            SUM(${overlapSecondsExpression()}) AS voice_30d,
+            SUM(CASE WHEN left_at IS NULL THEN CAST((? - joined_at) / 1000 AS INTEGER) ELSE duration_seconds END) AS voice_total
+        FROM voice_sessions
+        WHERE user_id = ?
+        AND guild_id = ?
+        `,
+        [
+            windows.now, windows.oneDayAgo, windows.now, windows.now, windows.now, windows.oneDayAgo,
+            windows.now, windows.sevenDaysAgo, windows.now, windows.now, windows.now, windows.sevenDaysAgo,
+            windows.now, windows.thirtyDaysAgo, windows.now, windows.now, windows.now, windows.thirtyDaysAgo,
+            windows.now,
+            userId,
+            guildId
+        ],
+        {}
+    );
+}
+
+function toHours(seconds) {
+    return ((Number(seconds || 0)) / 3600).toFixed(2);
 }
 
 async function handleUserStatsCommand(options) {
@@ -26,45 +60,12 @@ async function handleUserStatsCommand(options) {
     const targetUser = interaction.options.getUser("user") || interaction.user;
     const guildId = interaction.guild.id;
     const userId = targetUser.id;
-    const { now, oneDayAgo, sevenDaysAgo, thirtyDaysAgo } = getTimeWindows();
+    const windows = getTimeWindows();
 
     try {
         const [messageStats, voiceStats] = await Promise.all([
-            dbGet(
-                db,
-                `
-                SELECT
-                    COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_1d,
-                    COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_7d,
-                    COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_30d,
-                    COUNT(*) AS messages_total
-                FROM messages
-                WHERE user_id = ?
-                AND guild_id = ?
-                `,
-                [oneDayAgo, sevenDaysAgo, thirtyDaysAgo, userId, guildId]
-            ),
-            dbGet(
-                db,
-                `
-                SELECT
-                    SUM(${overlapSecondsExpression()}) AS voice_1d,
-                    SUM(${overlapSecondsExpression()}) AS voice_7d,
-                    SUM(${overlapSecondsExpression()}) AS voice_30d,
-                    SUM(CASE WHEN left_at IS NULL THEN CAST((? - joined_at) / 1000 AS INTEGER) ELSE duration_seconds END) AS voice_total
-                FROM voice_sessions
-                WHERE user_id = ?
-                AND guild_id = ?
-                `,
-                [
-                    now, oneDayAgo, now, now, now, oneDayAgo,
-                    now, sevenDaysAgo, now, now, now, sevenDaysAgo,
-                    now, thirtyDaysAgo, now, now, now, thirtyDaysAgo,
-                    now,
-                    userId,
-                    guildId
-                ]
-            )
+            getUserMessageStats(db, guildId, userId, windows),
+            getUserVoiceStats(db, guildId, userId, windows)
         ]);
 
         const buffer = await createUserStatsCard({
@@ -75,9 +76,9 @@ async function handleUserStatsCommand(options) {
             messages1d: messageStats.messages_1d || 0,
             messages7d: messageStats.messages_7d || 0,
             messages30d: messageStats.messages_30d || 0,
-            voice1d: ((voiceStats.voice_1d || 0) / 3600).toFixed(2),
-            voice7d: ((voiceStats.voice_7d || 0) / 3600).toFixed(2),
-            voice30d: ((voiceStats.voice_30d || 0) / 3600).toFixed(2)
+            voice1d: toHours(voiceStats.voice_1d),
+            voice7d: toHours(voiceStats.voice_7d),
+            voice30d: toHours(voiceStats.voice_30d)
         });
 
         await sendLatestCard({
@@ -92,11 +93,13 @@ async function handleUserStatsCommand(options) {
             content: "✅ User stats card updated."
         });
     } catch (error) {
-        console.error("Stats command error:", error);
+        logger.error("Stats command error", error);
         return interaction.editReply("Error creating stats card.");
     }
 }
 
 module.exports = {
-    handleUserStatsCommand
+    handleUserStatsCommand,
+    getUserMessageStats,
+    getUserVoiceStats
 };

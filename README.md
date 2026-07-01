@@ -1,13 +1,20 @@
 # Glizzanator Bot
 
-High Society Discord bot focused on server activity stats, user stat cards, leaderboards, RAWG game lookups, and Glizzboard card previews.
+High Society Discord bot focused on server activity stats, user stat cards, leaderboards, RAWG game lookups, stream tracking, welcome cards, Glizzboard previews, and a future-ready music-player foundation.
 
-This build is focused on stats, cards, and game features.
+The card rendering files under `cards/` were intentionally left alone so card work can continue separately.
+
+## Requirements
+
+- Node.js 18 or newer
+- A Discord bot application
+- A Discord server for slash command deployment
+- RAWG API key for game lookup features
 
 ## Setup
 
 1. Copy `.env.example` to `.env`.
-2. Fill in `DISCORD_TOKEN`, `CLIENT_ID`, `GUILD_ID`, and `RAWG_API_KEY`.
+2. Fill in your Discord and RAWG values.
 3. Install dependencies:
 
 ```bash
@@ -26,6 +33,47 @@ npm run deploy
 npm start
 ```
 
+## Useful scripts
+
+```bash
+npm start          # Start the bot
+npm run deploy     # Register slash commands
+npm run check      # Syntax-check project JavaScript files
+npm run preview    # Preview cards locally
+npm run watch:card # Watch a card file and regenerate previews
+```
+
+## Environment variables
+
+Required:
+
+```text
+DISCORD_TOKEN=
+CLIENT_ID=
+GUILD_ID=
+RAWG_API_KEY=
+```
+
+Optional:
+
+```text
+WELCOME_CHANNEL_ID=
+STREAM_ALERT_CHANNEL_ID=
+STREAM_LOG_CHANNEL_ID=
+BOT_LOG_CHANNEL_ID=
+ENABLE_WELCOME_NICKNAME=false
+```
+
+Future music-player foundation:
+
+```text
+ENABLE_MUSIC=false
+MUSIC_MAX_QUEUE_SIZE=50
+MUSIC_IDLE_DISCONNECT_MS=300000
+```
+
+Leave `ENABLE_MUSIC=false` until the actual voice/audio backend is added.
+
 ## Available commands
 
 - `/ping`
@@ -33,60 +81,70 @@ npm start
 - `/serverstats`
 - `/leaderboard`
 - `/topgames`
+- `/glizzboard`
 - `/recentgames`
+- `/glizzify`
+- `/testwelcome`
 
-## Glizzboard preview
-
-Generate a one-time preview:
-
-```bash
-node preview-card.js cards/glizzboardCard.js
-node preview-card.js cards/serverCard.js
-node preview-card.js cards/userCard.js
-
-node watch-card.js cards/serverCard.js
-```
-
-Start the live preview watcher:
-
-```bash
-npm run preview
-npm run watch:card -- cards/streamProfileCard.js
-```
-
-The preview watcher regenerates `glizzboard-output.png` when card, test, or asset files change.
+The `/music` command is present in the code foundation but only deploys when `ENABLE_MUSIC=true`.
 
 ## Project layout
 
 ```text
 assets/              Image assets used by cards
-cards/               Canvas card generators
-commands/            Slash command handlers
-database/            Game search persistence helpers
+cards/               Canvas card generators; intentionally not refactored here
+commands/            Slash command handlers and command registry
+config/              Central environment/config loader
+database/            SQLite helpers and feature persistence helpers
+docs/                Project documentation
 events/              Discord event handlers
 gaming/              RAWG API and game embed helpers
+services/            Reusable service foundations, including music
 stats/               Server/user stat aggregation helpers
+utils/               Logging and small shared utilities
+scripts/             Local project scripts
 index.js             Bot entry point
 deploy-commands.js   Slash command deploy script
 ```
 
-## Notes
+## Refactor notes
 
-Keep `.env`, database files, logs, and `node_modules/` out of Git.
+This cleanup focused on making the project easier to navigate without changing the card-rendering code:
 
-Local backup to my Drive
-$project = "E:\Discord Bot\Glizzanator-Bot"
-$backupRoot = "E:\Discord Bot\Backups"
-$stamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
-$backupName = "Glizzanator-Bot-Backup_$stamp"
-$backupFolder = Join-Path $backupRoot $backupName
-$backupZip = "$backupFolder.zip"
+- central config loader
+- command registry for routing and deployment
+- shared SQLite Promise helpers
+- shared stats SQL expressions
+- shared logger
+- safer message/event error handling
+- music queue/player foundation for future voice support
+- duplicate backup files removed
 
-New-Item -ItemType Directory -Force -Path $backupFolder | Out-Null
+## Card previews
 
-robocopy $project $backupFolder /E /XD node_modules .git /R:1 /W:1
+Generate a one-time preview:
 
-Compress-Archive -Path "$backupFolder\*" -DestinationPath $backupZip -Force
+```bash
+npm run preview -- cards/glizzboardCard.js
+npm run preview -- cards/serverCard.js
+npm run preview -- cards/userCard.js
+```
 
-Write-Host "Backup created:"
-Write-Host $backupZip
+Start the live preview watcher:
+
+```bash
+npm run watch:card -- cards/streamProfileCard.js
+```
+
+## Development notes
+
+Keep `.env`, database files, logs, backups, generated images, and `node_modules/` out of Git.
+
+Recommended local verification before pushing changes:
+
+```bash
+npm install
+npm run check
+npm run deploy
+npm start
+```

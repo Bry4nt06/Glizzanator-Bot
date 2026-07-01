@@ -1,23 +1,23 @@
-// Utility Commands
-const { handlePingCommand } = require("../commands/utility/pingCommand");
-const { handleGlizzifyCommand } = require("../commands/utility/glizzifyCommand");
-const { handleTestWelcomeCommand } = require("../commands/utility/testWelcomeCommand");
+const { createCommandRegistry } = require("../commands/registry");
+const logger = require("../utils/logger");
 
-// Gaming Commands
-const gameCommands = require("../commands/gameCommands");
-const { registerGamingCommands } = require("../commands/gameCommands");
+async function replyWithError(interaction) {
+    const errorMessage = "❌ Something went wrong while running that command.";
 
-// Stats Commands
-const { handleServerStatsCommand } = require("../commands/stats/serverStatsCommand");
-const { handleUserStatsCommand } = require("../commands/stats/userStatsCommand");
-const { handleLeaderboardCommand } = require("../commands/stats/leaderboardCommand");
+    if (interaction.deferred || interaction.replied) {
+        return interaction.editReply({
+            content: errorMessage
+        }).catch(() => {});
+    }
+
+    return interaction.reply({
+        content: errorMessage,
+        ephemeral: true
+    }).catch(() => {});
+}
 
 function registerInteractionCreateEvent(client, options) {
-    const {
-        db,
-        saveLatestGameSearch,
-        getLatestGameSearch
-    } = options;
+    const commands = createCommandRegistry(options);
 
     client.on("interactionCreate", async (interaction) => {
         try {
@@ -35,96 +35,19 @@ function registerInteractionCreateEvent(client, options) {
             if (!interaction.isChatInputCommand()) return;
             if (!interaction.guild) return;
 
-            const commandName = interaction.commandName;
+            const command = commands.get(interaction.commandName);
 
-            // =========================
-            // Utility Commands
-            // =========================
-            if (commandName === "ping") {
-                return handlePingCommand(interaction);
-            }
-
-            if (commandName === "glizzify") {
-                return handleGlizzifyCommand(interaction);
-            }
-
-            if (commandName === "testwelcome") {
-                return handleTestWelcomeCommand(interaction);
-            }
-
-            // =========================
-            // Gaming Commands
-            // =========================
-            if (commandName === "topgames") {
-                if (typeof gameCommands.handleTopGames !== "function") {
-                    throw new Error("gameCommands.handleTopGames is not exported from commands/gameCommands.js");
-                }
-
-                return gameCommands.handleTopGames(interaction, { db, saveLatestGameSearch });
-            }
-
-            if (commandName === "glizzboard") {
-                if (typeof gameCommands.handleGlizzboard !== "function") {
-                    throw new Error("gameCommands.handleGlizzboard is not exported from commands/gameCommands.js");
-                }
-
-                return gameCommands.handleGlizzboard(interaction, { db, saveLatestGameSearch });
-            }
-
-            if (commandName === "recentgames") {
-                const gamingCommands = registerGamingCommands({
-                    db,
-                    interaction,
-                    saveLatestGameSearch
-                });
-
-                return gamingCommands.handleRecentGames();
-            }
-
-            // =========================
-            // Stats Commands
-            // =========================
-            if (commandName === "stats") {
-                return handleUserStatsCommand({
-                    db,
-                    interaction
+            if (!command) {
+                return interaction.reply({
+                    content: "Unknown command.",
+                    ephemeral: true
                 });
             }
 
-            if (commandName === "serverstats") {
-                return handleServerStatsCommand({
-                    db,
-                    interaction,
-                    getLatestGameSearch
-                });
-            }
-
-            if (commandName === "leaderboard") {
-                return handleLeaderboardCommand({
-                    db,
-                    interaction
-                });
-            }
-
-            return interaction.reply({
-                content: "Unknown command.",
-                ephemeral: true
-            });
+            return command.execute(interaction);
         } catch (error) {
-            console.error("Interaction create error:", error);
-
-            const errorMessage = "❌ Something went wrong while running that command.";
-
-            if (interaction.deferred || interaction.replied) {
-                return interaction.editReply({
-                    content: errorMessage
-                }).catch(() => {});
-            }
-
-            return interaction.reply({
-                content: errorMessage,
-                ephemeral: true
-            }).catch(() => {});
+            logger.error("Interaction create error", error);
+            return replyWithError(interaction);
         }
     });
 }

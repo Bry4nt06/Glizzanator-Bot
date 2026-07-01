@@ -1,20 +1,8 @@
 const { createStreamProfileCard } = require("../cards/streamProfileCard");
 const { sendLatestCard } = require("../commands/utility/cardMessageManager");
 
-function dbGet(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
-    });
-}
-
-function dbRun(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.run(sql, params, function onRun(err) {
-            if (err) reject(err);
-            else resolve(this);
-        });
-    });
-}
+const { dbGet, dbRun } = require("../database/helpers");
+const logger = require("../utils/logger");
 
 async function closeOpenVoiceSession(db, userId, guildId, leftAt) {
     const session = await dbGet(
@@ -160,7 +148,7 @@ async function announceStreamStart(member, channel) {
             content: `🎥 **${member.displayName || member.user.username}** started streaming in **${channel?.name || "voice"}**`
         });
     } catch (error) {
-        console.error("Stream alert card failed:", error);
+        logger.error("Stream alert card failed", error);
 
         await alertChannel.send({
             content: `🎥 **${member.displayName || member.user.username}** started streaming in **${channel?.name || "voice"}**`
@@ -211,7 +199,7 @@ module.exports = function registerVoiceStateUpdateEvent(client, db) {
                 await openStreamSession(db, member, newState.channel, now);
             }
         } catch (error) {
-            console.error("Voice/stream state tracking error:", error);
+            logger.error("Voice/stream state tracking error", error);
         }
     });
 };

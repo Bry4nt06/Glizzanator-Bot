@@ -1,15 +1,16 @@
 {
   "name": "glizzanator-bot",
-  "version": "2.3.0-cleaned-performance",
-  "description": "High Society Discord bot with stats cards, game lookups, RAWG Glizzboard, and activity tracking.",
+  "version": "2.4.0-refactor-foundation",
+  "description": "High Society Discord bot with stats cards, game lookups, RAWG Glizzboard, activity tracking, and future music-player foundations.",
   "main": "index.js",
-"scripts": {
-  "start": "node index.js",
-  "deploy": "node deploy-commands.js",
-  "preview": "node preview-card.js",
-  "preview:card": "node preview-card.js",
-  "watch:card": "node watch-card.js"
-},
+  "scripts": {
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js",
+    "check": "node scripts/check-project.js",
+    "preview": "node preview-card.js",
+    "preview:card": "node preview-card.js",
+    "watch:card": "node watch-card.js"
+  },
   "engines": {
     "node": ">=18"
   },

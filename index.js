@@ -1,7 +1,7 @@
-require("dotenv").config();
-
-const db = require("./database");
 const { Client, GatewayIntentBits } = require("discord.js");
+const db = require("./database");
+const { config, validateBotConfig } = require("./config");
+const logger = require("./utils/logger");
 
 const registerReadyEvent = require("./events/ready");
 const registerMessageCreateEvent = require("./events/messageCreate");
@@ -15,11 +15,7 @@ const {
     getLatestGameSearch
 } = require("./database/gameSearches");
 
-const token = process.env.DISCORD_TOKEN || process.env.TOKEN;
-
-if (!token) {
-    throw new Error("Missing DISCORD_TOKEN or TOKEN in .env");
-}
+validateBotConfig();
 
 const client = new Client({
     intents: [
@@ -44,4 +40,7 @@ registerInteractionCreateEvent(client, {
     getLatestGameSearch
 });
 
-client.login(token);
+client.login(config.discord.token).catch((error) => {
+    logger.error("Discord login failed", error);
+    process.exitCode = 1;
+});

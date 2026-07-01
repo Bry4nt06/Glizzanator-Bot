@@ -1,32 +1,11 @@
 const { AttachmentBuilder } = require("discord.js");
 const { createStatsCard } = require("../card");
 const { sendLatestCard } = require("../commands/utility/cardMessageManager");
+const { dbGet, dbAll } = require("../database/helpers");
 const { getTimeWindows } = require("./timeWindows");
+const { overlapSecondsExpression } = require("./sqlExpressions");
 const { searchNewestBestGamesOutNow } = require("../gaming/rawg");
-
-function dbGet(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row || {})));
-    });
-}
-
-function dbAll(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
-    });
-}
-
-function overlapSecondsExpression(alias = "") {
-    const prefix = alias ? `${alias}.` : "";
-
-    return `
-        CASE
-            WHEN COALESCE(${prefix}left_at, ?) <= ? THEN 0
-            WHEN ${prefix}joined_at >= ? THEN 0
-            ELSE CAST((MIN(COALESCE(${prefix}left_at, ?), ?) - MAX(${prefix}joined_at, ?)) / 1000 AS INTEGER)
-        END
-    `;
-}
+const logger = require("../utils/logger");
 
 async function getServerStats(db, guild) {
     const { now, oneDayAgo, sevenDaysAgo, thirtyDaysAgo } = getTimeWindows();
@@ -103,7 +82,7 @@ async function getServerStats(db, guild) {
         SELECT
             user_id,
             username,
-            ROUND(SUM(${overlapSecondsExpression().replaceAll("left_at", "ended_at").replaceAll("joined_at", "started_at")}) / 3600.0, 2) AS hours
+            ROUND(SUM(${overlapSecondsExpression({ startColumn: "started_at", endColumn: "ended_at" })}) / 3600.0, 2) AS hours
         FROM stream_sessions
         WHERE guild_id = ?
         GROUP BY user_id
@@ -182,7 +161,7 @@ async function getGameData(db, guildId, getLatestGameSearch) {
         const rawgResult = await searchNewestBestGamesOutNow();
         return rawgResult.card;
     } catch (error) {
-        console.log("RAWG game card failed, using saved game search:", error.message);
+        logger.warn("RAWG game card failed, using saved game search", { error: error.message });
         return fallbackGameData || {
             genre: "Top Games",
             topPick: "RAWG unavailable",
@@ -253,8 +232,12 @@ async function sendServerStats(db, target, getLatestGameSearch) {
             fileName: "high-society-stats.png"
         });
     } catch (error) {
-        console.error("Stats card error:", error);
-        return target.reply("Error creating stats card.");
+        logger.error("Stats card error", error);
+        if (typeof target.reply === "function") {
+            return target.reply("Error creating stats card.");
+        }
+
+        return null;
     }
 }
 module.exports = {

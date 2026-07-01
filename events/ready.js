@@ -1,17 +1,5 @@
-function dbGet(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
-    });
-}
-
-function dbRun(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.run(sql, params, function onRun(err) {
-            if (err) reject(err);
-            else resolve(this);
-        });
-    });
-}
+const { dbGet, dbRun } = require("../database/helpers");
+const logger = require("../utils/logger");
 
 async function updateGuildHeartbeat(db, guildId, now = Date.now()) {
     await dbRun(
@@ -140,14 +128,14 @@ async function recoverActivityTracking(client, db) {
             await openCurrentStreamSessions(db, guild);
             await updateGuildHeartbeat(db, guild.id, now);
         } catch (error) {
-            console.error(`Activity recovery failed for guild ${guild.id}:`, error);
+            logger.error(`Activity recovery failed for guild ${guild.id}`, error);
         }
     }
 }
 
 module.exports = function registerReadyEvent(client, db) {
     client.once("clientReady", async () => {
-        console.log(`Glizzanator Bot is online as ${client.user.tag}`);
+        logger.info(`Glizzanator Bot is online as ${client.user.tag}`);
 
         if (!db) return;
 
@@ -158,7 +146,7 @@ module.exports = function registerReadyEvent(client, db) {
 
             for (const guild of client.guilds.cache.values()) {
                 updateGuildHeartbeat(db, guild.id, now).catch((error) => {
-                    console.error(`Heartbeat update failed for guild ${guild.id}:`, error);
+                    logger.error(`Heartbeat update failed for guild ${guild.id}`, error);
                 });
             }
         }, 30_000).unref();
