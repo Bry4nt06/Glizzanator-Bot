@@ -10,7 +10,7 @@
   <header class="topbar">
     <div>
       <h1>Glizzanator Card Studio</h1>
-      <p>Visual card dashboard with live preview, controls, upload support, and JSON-backed layouts.</p>
+      <p>Visual card dashboard with live preview, draggable layers, controls, upload support, and JSON-backed layouts.</p>
     </div>
     <div class="top-actions">
       <button id="renderButton">Regenerate</button>
@@ -36,9 +36,24 @@
       </label>
 
       <label class="toggle-row">
+        <input id="designerToggle" type="checkbox" checked />
+        Enable visual designer
+      </label>
+
+      <label class="toggle-row">
         <input id="autoSaveToggle" type="checkbox" checked />
         Auto-save visual controls
       </label>
+
+      <section class="side-section">
+        <h2>Layers</h2>
+        <div id="layerList" class="layer-list"></div>
+      </section>
+
+      <section class="side-section">
+        <h2>Selected</h2>
+        <div id="selectedInspector" class="selected-inspector muted">Choose a layer or click an overlay.</div>
+      </section>
     </aside>
 
     <section class="preview-panel">
@@ -49,6 +64,7 @@
       <div class="preview-stage" id="previewStage">
         <img id="previewImage" alt="Card preview" />
         <div id="guideOverlay" class="guide-overlay"></div>
+        <div id="designerOverlay" class="designer-overlay"></div>
       </div>
     </section>
 
@@ -63,7 +79,7 @@
 
       <div class="tab-panel active" id="tab-quick">
         <h2>Visual Controls</h2>
-        <p class="muted compact">Use fields, sliders, toggles, and color pickers to change the selected card without touching code.</p>
+        <p class="muted compact">Use fields, sliders, toggles, color pickers, or drag layers directly on the preview.</p>
         <div id="quickControls" class="control-grid"></div>
       </div>
 
