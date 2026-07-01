@@ -1,7 +1,7 @@
 const { config } = require("../config");
 const { getCommandData, getCommandDefinitions } = require("./definitions");
 
-function createCommandRegistry(context) {
+function createCommandRegistry(context = {}) {
     const registry = new Map();
     const { db, saveLatestGameSearch, getLatestGameSearch } = context;
 
