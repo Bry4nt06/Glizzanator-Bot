@@ -1,159 +1,25 @@
 const { AttachmentBuilder } = require("discord.js");
 const { createStatsCard } = require("../card");
 const { sendLatestCard } = require("../commands/utility/cardMessageManager");
-const { dbGet, dbAll } = require("../database/helpers");
+const StatisticsRepository = require("../database/repositories/StatisticsRepository");
 const { getTimeWindows } = require("./timeWindows");
-const { overlapSecondsExpression } = require("./sqlExpressions");
 const { searchNewestBestGamesOutNow } = require("../gaming/rawg");
 const logger = require("../utils/logger");
 
 async function getServerStats(db, guild) {
-    const { now, oneDayAgo, sevenDaysAgo, thirtyDaysAgo } = getTimeWindows();
+    const windows = getTimeWindows();
     const guildId = guild.id;
 
-    const messageQuery = dbGet(
-        db,
-        `
-        SELECT
-            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_1d,
-            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_7d,
-            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_30d
-        FROM messages
-        WHERE guild_id = ?
-        `,
-        [oneDayAgo, sevenDaysAgo, thirtyDaysAgo, guildId]
-    );
-
-    const voiceQuery = dbGet(
-        db,
-        `
-        SELECT
-            SUM(${overlapSecondsExpression()}) AS voice_1d,
-            SUM(${overlapSecondsExpression()}) AS voice_7d,
-            SUM(${overlapSecondsExpression()}) AS voice_30d
-        FROM voice_sessions
-        WHERE guild_id = ?
-        `,
-        [
-            now, oneDayAgo, now, now, now, oneDayAgo,
-            now, sevenDaysAgo, now, now, now, sevenDaysAgo,
-            now, thirtyDaysAgo, now, now, now, thirtyDaysAgo,
-            guildId
-        ]
-    );
-
-    const topUsersQuery = dbAll(
-        db,
-        `
-        WITH voice_totals AS (
-            SELECT
-                user_id,
-                username,
-                SUM(
-                    CASE
-                        WHEN COALESCE(left_at, ?) <= joined_at THEN 0
-                        ELSE CAST((COALESCE(left_at, ?) - joined_at) / 1000 AS INTEGER)
-                    END
-                ) AS seconds
-            FROM voice_sessions
-            WHERE guild_id = ?
-            GROUP BY user_id
-
-            UNION ALL
-
-            SELECT
-                user_id,
-                username,
-                seconds
-            FROM activity_adjustments
-            WHERE guild_id = ?
-            AND activity_type = 'voice'
-        )
-        SELECT
-            user_id,
-            COALESCE(MAX(NULLIF(username, '')), 'Unknown') AS username,
-            ROUND(SUM(seconds) / 3600.0, 2) AS hours
-        FROM voice_totals
-        GROUP BY user_id
-        HAVING hours > 0
-        ORDER BY hours DESC
-        LIMIT 5
-        `,
-        [now, now, guildId, guildId]
-    );
-
-    const topChannelsQuery = dbAll(
-        db,
-        `
-        SELECT
-            channel_id,
-            channel_name,
-            ROUND(SUM(
-                CASE
-                    WHEN COALESCE(left_at, ?) <= joined_at THEN 0
-                    ELSE CAST((COALESCE(left_at, ?) - joined_at) / 1000 AS INTEGER)
-                END
-            ) / 3600.0, 2) AS hours
-        FROM voice_sessions
-        WHERE guild_id = ?
-        GROUP BY channel_id
-        HAVING hours > 0
-        ORDER BY hours DESC
-        LIMIT 5
-        `,
-        [now, now, guildId]
-    );
-
-    const topStreamerQuery = dbGet(
-        db,
-        `
-        WITH stream_totals AS (
-            SELECT
-                user_id,
-                username,
-                SUM(
-                    CASE
-                        WHEN COALESCE(ended_at, ?) <= started_at THEN 0
-                        ELSE CAST((COALESCE(ended_at, ?) - started_at) / 1000 AS INTEGER)
-                    END
-                ) AS seconds
-            FROM stream_sessions
-            WHERE guild_id = ?
-            GROUP BY user_id
-
-            UNION ALL
-
-            SELECT
-                user_id,
-                username,
-                seconds
-            FROM activity_adjustments
-            WHERE guild_id = ?
-            AND activity_type = 'stream'
-        )
-        SELECT
-            user_id,
-            COALESCE(MAX(NULLIF(username, '')), 'Unknown') AS username,
-            ROUND(SUM(seconds) / 3600.0, 2) AS hours
-        FROM stream_totals
-        GROUP BY user_id
-        HAVING hours > 0
-        ORDER BY hours DESC
-        LIMIT 1
-        `,
-        [now, now, guildId, guildId]
-    );
-
     const [msgStats, voiceStats, topUsers, topChannels, topStreamer] = await Promise.all([
-        messageQuery,
-        voiceQuery,
-        topUsersQuery,
-        topChannelsQuery,
-        topStreamerQuery
+        StatisticsRepository.getServerMessageStats(db, guildId, windows),
+        StatisticsRepository.getServerVoiceStats(db, guildId, windows),
+        StatisticsRepository.getTopVoiceUsers(db, guildId, windows.now),
+        StatisticsRepository.getTopVoiceChannels(db, guildId, windows.now),
+        StatisticsRepository.getTopStreamer(db, guildId, windows.now)
     ]);
 
     return {
-        now,
+        now: windows.now,
         msgStats,
         voiceStats,
         topUsers,
@@ -163,10 +29,10 @@ async function getServerStats(db, guild) {
 }
 
 function buildChannelBoard(topChannels = []) {
-    const medals = ["🥇", "🥈", "🥉", "🏅", "🏅"];
+    const medals = ["1.", "2.", "3.", "4.", "5."];
 
     return topChannels.map((channel, index) => {
-        return `${medals[index] || "🏅"} ${channel.channel_name || "Unknown Channel"} - ${channel.hours || 0} hrs`;
+        return `${medals[index] || "-"} ${channel.channel_name || "Unknown Channel"} - ${channel.hours || 0} hrs`;
     });
 }
 
@@ -265,16 +131,13 @@ async function buildServerStatsAttachment(db, guild, getLatestGameSearch) {
         name: "high-society-stats.png"
     });
 }
+
 async function sendServerStats(db, target, getLatestGameSearch) {
     try {
         const guild = target.guild;
         const channel = target.channel || target;
         const userId = target.author?.id || target.user?.id || "server-stats";
-        const cardBuffer = await buildServerStatsBuffer(
-            db,
-            guild,
-            getLatestGameSearch
-        );
+        const cardBuffer = await buildServerStatsBuffer(db, guild, getLatestGameSearch);
 
         return sendLatestCard({
             channel,
@@ -292,6 +155,7 @@ async function sendServerStats(db, target, getLatestGameSearch) {
         return null;
     }
 }
+
 module.exports = {
     getServerStats,
     buildServerStatsBuffer,
