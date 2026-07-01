@@ -1,6 +1,7 @@
 const { AttachmentBuilder, ChannelType } = require("discord.js");
 const { createWelcomeCard } = require("../cards/welcomeCard");
 const { getRandomGlizzyName } = require("../commands/utility/glizzifyCommand");
+const { config } = require("../config");
 const logger = require("../utils/logger");
 
 function findFallbackWelcomeChannel(guild) {
@@ -17,7 +18,7 @@ function registerGuildMemberAddEvent(client) {
         try {
             const glizzyName = getRandomGlizzyName();
 
-            if (process.env.ENABLE_WELCOME_NICKNAME === "true") {
+            if (config.features.welcomeNickname) {
                 await member.setNickname(
                     glizzyName,
                     "New member was glizzified on join"
@@ -36,7 +37,7 @@ function registerGuildMemberAddEvent(client) {
             });
 
             const channel =
-                member.guild.channels.cache.get(process.env.WELCOME_CHANNEL_ID) ||
+                member.guild.channels.cache.get(config.channels.welcome) ||
                 findFallbackWelcomeChannel(member.guild);
 
             if (!channel) {
