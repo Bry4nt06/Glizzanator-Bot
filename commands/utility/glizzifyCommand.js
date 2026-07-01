@@ -73,8 +73,6 @@ const GLIZZY_NICKNAMES = [
     "Skin Whistle",
 ];
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 function shuffle(array) {
     const copy = [...array];
 
@@ -86,7 +84,7 @@ function shuffle(array) {
     return copy;
 }
 
-function makeNickname(pool, index) {
+function makeNickname(pool, index = 0) {
     const base = pool[index % pool.length];
     const round = Math.floor(index / pool.length);
 
@@ -102,24 +100,30 @@ function getRandomGlizzyName() {
     return makeNickname(pool, 0);
 }
 
+function canManageMember(member, botMember) {
+    if (!member) return false;
+    if (!botMember) return false;
+    if (member.id === member.guild.ownerId) return false;
+    if (member.id === botMember.id) return false;
+    if (!member.manageable) return false;
+
+    return true;
+}
+
 const data = new SlashCommandBuilder()
     .setName("glizzify")
-    .setDescription("Randomly nickname server members with Glizzy-themed names.")
+    .setDescription("Give one server member a random Glizzy-themed nickname.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageNicknames)
-    .addStringOption(option =>
+    .addUserOption(option =>
         option
-            .setName("mode")
-            .setDescription("Preview or apply the Glizzy nicknames.")
+            .setName("member")
+            .setDescription("The member to glizzify.")
             .setRequired(true)
-            .addChoices(
-                { name: "Preview only", value: "preview" },
-                { name: "Apply to server", value: "apply" }
-            )
     )
     .addBooleanOption(option =>
         option
-            .setName("include_bots")
-            .setDescription("Also rename bots? Default: false")
+            .setName("preview")
+            .setDescription("Preview the nickname without applying it. Default: false")
             .setRequired(false)
     );
 
@@ -140,10 +144,10 @@ async function handleGlizzifyCommand(interaction) {
 
     await interaction.deferReply({ ephemeral: true });
 
-    const mode = interaction.options.getString("mode");
-    const includeBots = interaction.options.getBoolean("include_bots") ?? false;
-
+    const targetUser = interaction.options.getUser("member", true);
+    const previewOnly = interaction.options.getBoolean("preview") ?? false;
     const botMember = await interaction.guild.members.fetchMe();
+    const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
     if (!botMember.permissions.has(PermissionFlagsBits.ManageNicknames)) {
         return interaction.editReply(
@@ -151,79 +155,45 @@ async function handleGlizzifyCommand(interaction) {
         );
     }
 
-    const members = await interaction.guild.members.fetch();
+    if (!targetMember) {
+        return interaction.editReply("I could not find that member in this server.");
+    }
 
-    const targets = members.filter(member => {
-        if (member.id === interaction.guild.ownerId) return false;
-        if (member.id === botMember.id) return false;
-        if (member.user.bot && !includeBots) return false;
-        if (!member.manageable) return false;
+    if (targetMember.user.bot) {
+        return interaction.editReply("I will not glizzify bots with this command.");
+    }
 
-        return true;
-    });
-
-    const skipped = members.size - targets.size;
-    const nicknamePool = shuffle(GLIZZY_NICKNAMES);
-
-    if (mode === "preview") {
-        const preview = [...targets.values()]
-            .slice(0, 20)
-            .map((member, index) => {
-                const oldName = member.displayName;
-                const newName = makeNickname(nicknamePool, index);
-                return `**${oldName}** → ${newName}`;
-            });
-
+    if (!canManageMember(targetMember, botMember)) {
         return interaction.editReply(
-            [
-                `Glizzify preview ready.`,
-                ``,
-                `Members that can be renamed: **${targets.size}**`,
-                `Skipped members: **${skipped}**`,
-                ``,
-                preview.length ? preview.join("\n") : "No manageable members found.",
-                ``,
-                `Run \`/glizzify mode:Apply to server\` when ready.`
-            ].join("\n")
+            "I cannot nickname that member. They may be the server owner, me, or have a role higher than/equal to mine."
         );
     }
 
-    let changed = 0;
-    let failed = 0;
-    let index = 0;
+    const nickname = getRandomGlizzyName();
+    const oldName = targetMember.displayName;
 
-    await interaction.editReply(
-        `Starting Glizzify...\nManageable members: **${targets.size}**\nThis may take a while.`
-    );
-
-    for (const member of targets.values()) {
-        const nickname = makeNickname(nicknamePool, index);
-        index++;
-
-        try {
-            await member.setNickname(
-                nickname,
-                `Glizzanator random nickname command used by ${interaction.user.tag}`
-            );
-
-            changed++;
-        } catch (error) {
-            failed++;
-            console.log(`Failed to nickname ${member.user.tag}:`, error.message);
-        }
-
-        if ((changed + failed) % 10 === 0) {
-            await interaction.editReply(
-                `Glizzify running...\nChanged: **${changed}**\nFailed: **${failed}**\nSkipped: **${skipped}**`
-            ).catch(() => null);
-        }
-
-        await sleep(1250);
+    if (previewOnly) {
+        return interaction.editReply(
+            `Preview: **${oldName}** would become **${nickname}**.`
+        );
     }
 
-    return interaction.editReply(
-        `Glizzify complete.\nChanged: **${changed}**\nFailed: **${failed}**\nSkipped: **${skipped}**`
-    );
+    try {
+        await targetMember.setNickname(
+            nickname,
+            `Glizzanator random nickname command used by ${interaction.user.tag}`
+        );
+
+        return interaction.editReply(
+            `Glizzified **${oldName}** into **${nickname}**.`
+        );
+    } catch (error) {
+        console.error(`Failed to nickname ${targetMember.user.tag}:`, error);
+
+        return interaction.editReply(
+            "I tried to glizzify that member, but Discord rejected the nickname change. Check my role position and permissions."
+        );
+    }
 }
 
 module.exports = {
