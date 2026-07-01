@@ -1,6 +1,11 @@
 (() => {
+  const GRID_SIZE = 5;
+  const NUDGE_SMALL = 1;
+  const NUDGE_LARGE = 10;
+
   let selectedLayer = null;
   let dragState = null;
+  let resizeState = null;
 
   const layerDefinitions = {
     stream: [
@@ -8,6 +13,7 @@
         id: "avatar",
         label: "Avatar",
         path: "avatar",
+        resizable: true,
         rect(layout) {
           const size = Number(layout.avatar?.size || 196);
           return {
@@ -21,6 +27,11 @@
           layout.avatar ||= {};
           layout.avatar.x = Math.round(x);
           layout.avatar.y = Math.round(y);
+        },
+        resize(layout, width) {
+          layout.avatar ||= {};
+          const size = clamp(Math.round(width), 80, 260);
+          layout.avatar.size = size;
         }
       },
       {
@@ -83,6 +94,7 @@
         id: "channelBox",
         label: "Voice Channel Box",
         path: "infoBoxes.firstY",
+        resizable: true,
         rect(layout) {
           return {
             x: Number(layout.infoBoxes?.x || 285),
@@ -95,12 +107,17 @@
           layout.infoBoxes ||= {};
           layout.infoBoxes.x = Math.round(x);
           layout.infoBoxes.firstY = Math.round(y);
+        },
+        resize(layout, width) {
+          layout.infoBoxes ||= {};
+          layout.infoBoxes.channelWidth = clamp(Math.round(width), 120, 600);
         }
       },
       {
         id: "timeBox",
         label: "Started Time Box",
         path: "infoBoxes.secondY",
+        resizable: true,
         rect(layout) {
           return {
             x: Number(layout.infoBoxes?.x || 285),
@@ -113,6 +130,10 @@
           layout.infoBoxes ||= {};
           layout.infoBoxes.x = Math.round(x);
           layout.infoBoxes.secondY = Math.round(y);
+        },
+        resize(layout, width) {
+          layout.infoBoxes ||= {};
+          layout.infoBoxes.timeWidth = clamp(Math.round(width), 120, 520);
         }
       }
     ],
@@ -136,6 +157,14 @@
 
   function studio() {
     return window.CardStudio;
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function snap(value, size = GRID_SIZE) {
+    return Math.round(value / size) * size;
   }
 
   function getLayers() {
@@ -184,6 +213,24 @@
     };
   }
 
+  function commitLayoutLocally() {
+    studio().el.layoutEditor.value = studio().pretty(studio().state.layout);
+    studio().buildQuickControls();
+    renderOverlay();
+  }
+
+  async function saveOrRender() {
+    try {
+      if (studio().el.autoSaveToggle?.checked) {
+        await studio().saveLayout({ quiet: true });
+      } else {
+        await studio().renderPreview();
+      }
+    } catch (error) {
+      studio().setStatus(error.message);
+    }
+  }
+
   function renderLayers() {
     const api = studio();
     if (!api?.el?.layerList) return;
@@ -215,7 +262,7 @@
       <div class="inspector-row">Y <span>${Math.round(rect.y)}</span></div>
       <div class="inspector-row">W <span>${Math.round(rect.w)}</span></div>
       <div class="inspector-row">H <span>${Math.round(rect.h)}</span></div>
-      <small>Drag the highlighted box on the preview to move it.</small>
+      <small>Drag to move. Use arrow keys to nudge. Hold Shift for 10px. Drag the corner dot to resize supported layers.</small>
     `;
   }
 
@@ -250,6 +297,14 @@
         event.stopPropagation();
         selectLayer(layer.id);
       });
+
+      if (layer.resizable) {
+        const handle = document.createElement("i");
+        handle.className = "resize-handle";
+        handle.addEventListener("pointerdown", (event) => beginResize(event, layer));
+        box.appendChild(handle);
+      }
+
       overlay.appendChild(box);
     });
 
@@ -286,8 +341,8 @@
     if (!dragState) return;
 
     const delta = fromScreenDelta(event.clientX - dragState.startX, event.clientY - dragState.startY);
-    const nextX = Math.max(0, dragState.originalX + delta.x);
-    const nextY = Math.max(0, dragState.originalY + delta.y);
+    const nextX = Math.max(0, snap(dragState.originalX + delta.x));
+    const nextY = Math.max(0, snap(dragState.originalY + delta.y));
 
     dragState.layer.update(studio().state.layout, nextX, nextY);
     studio().el.layoutEditor.value = studio().pretty(studio().state.layout);
@@ -300,15 +355,69 @@
     if (!dragState) return;
     dragState = null;
 
-    try {
-      if (studio().el.autoSaveToggle?.checked) {
-        await studio().saveLayout({ quiet: true });
-      } else {
-        await studio().renderPreview();
-      }
-    } catch (error) {
-      studio().setStatus(error.message);
-    }
+    await saveOrRender();
+  }
+
+  function beginResize(event, layer) {
+    if (!layer.resizable || !studio().el.designerToggle?.checked) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    selectLayer(layer.id);
+
+    const rect = layer.rect(studio().state.layout || {});
+    resizeState = {
+      layer,
+      startX: event.clientX,
+      startY: event.clientY,
+      originalW: rect.w,
+      originalH: rect.h
+    };
+
+    window.addEventListener("pointermove", onResizeMove);
+    window.addEventListener("pointerup", endResize, { once: true });
+  }
+
+  function onResizeMove(event) {
+    if (!resizeState) return;
+
+    const delta = fromScreenDelta(event.clientX - resizeState.startX, event.clientY - resizeState.startY);
+    const nextW = Math.max(20, snap(resizeState.originalW + delta.x));
+    const nextH = Math.max(20, snap(resizeState.originalH + delta.y));
+    const nextSize = resizeState.layer.id === "avatar" ? Math.max(nextW, nextH) : nextW;
+
+    resizeState.layer.resize(studio().state.layout, nextSize);
+    commitLayoutLocally();
+  }
+
+  async function endResize() {
+    window.removeEventListener("pointermove", onResizeMove);
+
+    if (!resizeState) return;
+    resizeState = null;
+
+    await saveOrRender();
+  }
+
+  async function nudgeSelected(event) {
+    if (!selectedLayer || !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
+
+    event.preventDefault();
+
+    const step = event.shiftKey ? NUDGE_LARGE : NUDGE_SMALL;
+    const rect = selectedLayer.rect(studio().state.layout || {});
+    let x = rect.x;
+    let y = rect.y;
+
+    if (event.key === "ArrowLeft") x -= step;
+    if (event.key === "ArrowRight") x += step;
+    if (event.key === "ArrowUp") y -= step;
+    if (event.key === "ArrowDown") y += step;
+
+    selectedLayer.update(studio().state.layout, Math.max(0, x), Math.max(0, y));
+    commitLayoutLocally();
+    studio().scheduleRender();
   }
 
   function initDesigner() {
@@ -317,6 +426,7 @@
     window.addEventListener("cardstudio:rendered", renderOverlay);
     window.addEventListener("cardstudio:designer-toggle", renderOverlay);
     window.addEventListener("resize", renderOverlay);
+    window.addEventListener("keydown", nudgeSelected);
 
     if (studio()?.el?.previewImage) {
       studio().el.previewImage.addEventListener("load", renderOverlay);
