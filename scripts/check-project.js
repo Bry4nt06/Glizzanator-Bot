@@ -13,6 +13,8 @@ const requiredPaths = [
     "database/migrations/002_indexes.js",
     "database/migrations/index.js",
     "database/migrations/migrationRunner.js",
+    "database/repositories/ActivityAdjustmentRepository.js",
+    "database/repositories/GameSearchRepository.js",
     "database/repositories/MessageRepository.js",
     "database/repositories/StatusRepository.js",
     "database/repositories/StatisticsRepository.js",
@@ -46,6 +48,7 @@ const forbiddenPatterns = [
 ];
 
 const sqlBoundaryPatterns = ["SELECT ", "INSERT ", "UPDATE ", "DELETE "];
+const directDatabaseCallPatterns = ["db.run(", "db.get(", "db.all(", "dbRun(", "dbGet(", "dbAll("];
 
 function isDatabaseLayerFile(file) {
     return file.includes(`${path.sep}database${path.sep}repositories${path.sep}`)
@@ -145,18 +148,19 @@ function checkSqlBoundaries() {
         if (isDatabaseLayerFile(file)) continue;
 
         const content = fs.readFileSync(file, "utf8");
-        const matchedPattern = sqlBoundaryPatterns.find((pattern) => content.includes(pattern));
+        const matchedSql = sqlBoundaryPatterns.find((pattern) => content.includes(pattern));
+        const matchedCall = directDatabaseCallPatterns.find((pattern) => content.includes(pattern));
 
-        if (matchedPattern) {
+        if (matchedSql || matchedCall) {
             violations.push({
                 file: path.relative(root, file),
-                pattern: matchedPattern.trim()
+                pattern: (matchedSql || matchedCall).trim()
             });
         }
     }
 
     if (violations.length) {
-        console.error("SQL found outside database layer:");
+        console.error("Database access found outside database layer:");
         for (const violation of violations) {
             console.error(`- ${violation.file}: ${violation.pattern}`);
         }
