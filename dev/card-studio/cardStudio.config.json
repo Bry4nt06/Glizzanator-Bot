@@ -1,0 +1,34 @@
+{
+  "port": 3001,
+  "openBrowserOnStart": true,
+  "openConfigOnStart": true,
+  "defaultCard": "server",
+  "watch": [
+    "cards",
+    "assets",
+    "dev/card-studio"
+  ],
+  "cards": {
+    "server": {
+      "label": "Server Stats Card",
+      "outputName": "server-card-studio.png",
+      "modulePath": "cards/serverCard.js"
+    },
+    "stream": {
+      "label": "Stream Alert Card",
+      "outputName": "stream-alert-studio.png",
+      "modulePath": "cards/streamProfileCard.js"
+    }
+  },
+  "features": {
+    "autoRefresh": true,
+    "sampleDataMode": true,
+    "layoutGuides": false,
+    "realDatabaseMode": false
+  },
+  "notes": {
+    "sampleData": "Edit dev/card-studio/sampleData.js to change usernames, nicknames, hours, messages, channels, music, and game data.",
+    "cardLayout": "Edit cards/*.js to change actual card rendering.",
+    "future": "Real database mode will be added after the card studio base is stable."
+  }
+}
