@@ -34,22 +34,18 @@ function pingCommand() {
 function glizzifyCommand() {
     return new SlashCommandBuilder()
         .setName("glizzify")
-        .setDescription("Randomly nickname server members with Glizzy-themed names.")
+        .setDescription("Give one server member a random Glizzy-themed nickname.")
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageNicknames)
-        .addStringOption(option =>
+        .addUserOption(option =>
             option
-                .setName("mode")
-                .setDescription("Preview or apply the Glizzy nicknames.")
+                .setName("member")
+                .setDescription("The member to glizzify.")
                 .setRequired(true)
-                .addChoices(
-                    { name: "Preview only", value: "preview" },
-                    { name: "Apply to server", value: "apply" }
-                )
         )
         .addBooleanOption(option =>
             option
-                .setName("include_bots")
-                .setDescription("Also rename bots? Default: false")
+                .setName("preview")
+                .setDescription("Preview the nickname without applying it. Default: false")
                 .setRequired(false)
         );
 }
