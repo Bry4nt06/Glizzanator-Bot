@@ -34,6 +34,12 @@ const REQUIRED_ENV_KEYS = [
     "RAWG_API_KEY"
 ];
 
+const LOCAL_DATABASE_FILES = [
+    "glizzanator.db",
+    "glizzanator.db-shm",
+    "glizzanator.db-wal"
+];
+
 function exists(relativePath) {
     return fs.existsSync(path.join(ROOT, relativePath));
 }
@@ -56,8 +62,8 @@ function checkFileList(label, files) {
     };
 }
 
-function readEnvExample() {
-    const filePath = path.join(ROOT, ".env.example");
+function readTextFile(relativePath) {
+    const filePath = path.join(ROOT, relativePath);
 
     if (!fs.existsSync(filePath)) {
         return "";
@@ -67,7 +73,7 @@ function readEnvExample() {
 }
 
 function checkEnvExample() {
-    const content = readEnvExample();
+    const content = readTextFile(".env.example");
     const missing = REQUIRED_ENV_KEYS.filter((key) => !content.includes(`${key}=`));
 
     if (!missing.length) {
@@ -101,6 +107,43 @@ function checkLocalEnv() {
     };
 }
 
+function checkGitIgnore() {
+    const content = readTextFile(".gitignore");
+    const missing = LOCAL_DATABASE_FILES.filter((file) => !content.includes(file));
+
+    if (!missing.length) {
+        return {
+            label: "gitignore",
+            ok: true,
+            message: ".gitignore protects local SQLite database files."
+        };
+    }
+
+    return {
+        label: "gitignore",
+        ok: false,
+        message: `.gitignore should include ${missing.join(", ")}`
+    };
+}
+
+function checkLocalDatabase() {
+    if (!exists("glizzanator.db")) {
+        return {
+            label: "database",
+            ok: false,
+            message: "Local database not found yet. It should be created after the bot starts."
+        };
+    }
+
+    const stats = fs.statSync(path.join(ROOT, "glizzanator.db"));
+
+    return {
+        label: "database",
+        ok: true,
+        message: `Local database exists (${Math.round(stats.size / 1024)} KB).`
+    };
+}
+
 function printResult(result) {
     const icon = result.ok ? "OK" : "WARN";
     console.log(`[${icon}] ${result.message}`);
@@ -114,7 +157,9 @@ function runDoctor() {
         checkFileList("project-files", REQUIRED_FILES),
         checkFileList("card-assets", REQUIRED_ASSETS),
         checkEnvExample(),
-        checkLocalEnv()
+        checkLocalEnv(),
+        checkGitIgnore(),
+        checkLocalDatabase()
     ];
 
     results.forEach(printResult);
