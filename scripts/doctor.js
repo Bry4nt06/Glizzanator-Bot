@@ -119,6 +119,10 @@ function checkConfig() {
 }
 
 async function runDoctor() {
+    if (db.ready) {
+        await db.ready;
+    }
+
     const tables = await getTables();
     const indexes = await getIndexes();
     const migrations = await getMigrations();
