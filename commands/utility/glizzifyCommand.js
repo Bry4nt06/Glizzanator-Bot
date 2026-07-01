@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+const { PermissionFlagsBits } = require("discord.js");
 
 const GLIZZY_NICKNAMES = [
     "Glizzy Gladiator",
@@ -73,8 +73,6 @@ const GLIZZY_NICKNAMES = [
     "Skin Whistle",
 ];
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 function shuffle(array) {
     const copy = [...array];
 
@@ -86,42 +84,25 @@ function shuffle(array) {
     return copy;
 }
 
-function makeNickname(pool, index) {
+function makeNickname(pool, index = 0) {
     const base = pool[index % pool.length];
     const round = Math.floor(index / pool.length);
-
-    const nickname = round > 0
-        ? `${base} ${round + 1}`
-        : base;
+    const nickname = round > 0 ? `${base} ${round + 1}` : base;
 
     return nickname.slice(0, 32);
 }
 
 function getRandomGlizzyName() {
-    const pool = shuffle(GLIZZY_NICKNAMES);
-    return makeNickname(pool, 0);
+    return makeNickname(shuffle(GLIZZY_NICKNAMES), 0);
 }
 
-const data = new SlashCommandBuilder()
-    .setName("glizzify")
-    .setDescription("Randomly nickname server members with Glizzy-themed names.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageNicknames)
-    .addStringOption(option =>
-        option
-            .setName("mode")
-            .setDescription("Preview or apply the Glizzy nicknames.")
-            .setRequired(true)
-            .addChoices(
-                { name: "Preview only", value: "preview" },
-                { name: "Apply to server", value: "apply" }
-            )
-    )
-    .addBooleanOption(option =>
-        option
-            .setName("include_bots")
-            .setDescription("Also rename bots? Default: false")
-            .setRequired(false)
-    );
+function canManageMember(member, botMember) {
+    if (!member || !botMember) return false;
+    if (member.id === member.guild.ownerId) return false;
+    if (member.id === botMember.id) return false;
+
+    return member.manageable;
+}
 
 async function handleGlizzifyCommand(interaction) {
     if (!interaction.guild) {
@@ -140,94 +121,53 @@ async function handleGlizzifyCommand(interaction) {
 
     await interaction.deferReply({ ephemeral: true });
 
-    const mode = interaction.options.getString("mode");
-    const includeBots = interaction.options.getBoolean("include_bots") ?? false;
-
+    const targetUser = interaction.options.getUser("member", true);
+    const previewOnly = interaction.options.getBoolean("preview") ?? false;
     const botMember = await interaction.guild.members.fetchMe();
+    const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
     if (!botMember.permissions.has(PermissionFlagsBits.ManageNicknames)) {
+        return interaction.editReply("I need the **Manage Nicknames** permission before I can do this.");
+    }
+
+    if (!targetMember) {
+        return interaction.editReply("I could not find that member in this server.");
+    }
+
+    if (targetMember.user.bot) {
+        return interaction.editReply("I will not glizzify bots with this command.");
+    }
+
+    if (!canManageMember(targetMember, botMember)) {
         return interaction.editReply(
-            "I need the **Manage Nicknames** permission before I can do this."
+            "I cannot nickname that member. They may be the server owner, me, or have a role higher than/equal to mine."
         );
     }
 
-    const members = await interaction.guild.members.fetch();
+    const nickname = getRandomGlizzyName();
+    const oldName = targetMember.displayName;
 
-    const targets = members.filter(member => {
-        if (member.id === interaction.guild.ownerId) return false;
-        if (member.id === botMember.id) return false;
-        if (member.user.bot && !includeBots) return false;
-        if (!member.manageable) return false;
+    if (previewOnly) {
+        return interaction.editReply(`Preview: **${oldName}** would become **${nickname}**.`);
+    }
 
-        return true;
-    });
+    try {
+        await targetMember.setNickname(
+            nickname,
+            `Glizzanator random nickname command used by ${interaction.user.tag}`
+        );
 
-    const skipped = members.size - targets.size;
-    const nicknamePool = shuffle(GLIZZY_NICKNAMES);
-
-    if (mode === "preview") {
-        const preview = [...targets.values()]
-            .slice(0, 20)
-            .map((member, index) => {
-                const oldName = member.displayName;
-                const newName = makeNickname(nicknamePool, index);
-                return `**${oldName}** → ${newName}`;
-            });
+        return interaction.editReply(`Glizzified **${oldName}** into **${nickname}**.`);
+    } catch (error) {
+        console.error(`Failed to nickname ${targetMember.user.tag}:`, error);
 
         return interaction.editReply(
-            [
-                `Glizzify preview ready.`,
-                ``,
-                `Members that can be renamed: **${targets.size}**`,
-                `Skipped members: **${skipped}**`,
-                ``,
-                preview.length ? preview.join("\n") : "No manageable members found.",
-                ``,
-                `Run \`/glizzify mode:Apply to server\` when ready.`
-            ].join("\n")
+            "I tried to glizzify that member, but Discord rejected the nickname change. Check my role position and permissions."
         );
     }
-
-    let changed = 0;
-    let failed = 0;
-    let index = 0;
-
-    await interaction.editReply(
-        `Starting Glizzify...\nManageable members: **${targets.size}**\nThis may take a while.`
-    );
-
-    for (const member of targets.values()) {
-        const nickname = makeNickname(nicknamePool, index);
-        index++;
-
-        try {
-            await member.setNickname(
-                nickname,
-                `Glizzanator random nickname command used by ${interaction.user.tag}`
-            );
-
-            changed++;
-        } catch (error) {
-            failed++;
-            console.log(`Failed to nickname ${member.user.tag}:`, error.message);
-        }
-
-        if ((changed + failed) % 10 === 0) {
-            await interaction.editReply(
-                `Glizzify running...\nChanged: **${changed}**\nFailed: **${failed}**\nSkipped: **${skipped}**`
-            ).catch(() => null);
-        }
-
-        await sleep(1250);
-    }
-
-    return interaction.editReply(
-        `Glizzify complete.\nChanged: **${changed}**\nFailed: **${failed}**\nSkipped: **${skipped}**`
-    );
 }
 
 module.exports = {
-    data,
     handleGlizzifyCommand,
     GLIZZY_NICKNAMES,
     getRandomGlizzyName,

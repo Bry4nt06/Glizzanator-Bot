@@ -34,24 +34,113 @@ function pingCommand() {
 function glizzifyCommand() {
     return new SlashCommandBuilder()
         .setName("glizzify")
-        .setDescription("Randomly nickname server members with Glizzy-themed names.")
+        .setDescription("Give one server member a random Glizzy-themed nickname.")
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageNicknames)
-        .addStringOption(option =>
+        .addUserOption(option =>
             option
-                .setName("mode")
-                .setDescription("Preview or apply the Glizzy nicknames.")
+                .setName("member")
+                .setDescription("The member to glizzify.")
                 .setRequired(true)
-                .addChoices(
-                    { name: "Preview only", value: "preview" },
-                    { name: "Apply to server", value: "apply" }
-                )
         )
         .addBooleanOption(option =>
             option
-                .setName("include_bots")
-                .setDescription("Also rename bots? Default: false")
+                .setName("preview")
+                .setDescription("Preview the nickname without applying it. Default: false")
                 .setRequired(false)
         );
+}
+
+function activityMemberOption(command) {
+    return command.addUserOption(option =>
+        option
+            .setName("member")
+            .setDescription("The member to adjust or view.")
+            .setRequired(true)
+    );
+}
+
+function activityHoursOption(command) {
+    return command.addNumberOption(option =>
+        option
+            .setName("hours")
+            .setDescription("Number of hours. Decimals are allowed, for example 1.5.")
+            .setMinValue(0)
+            .setRequired(true)
+    );
+}
+
+function activityReasonOption(command) {
+    return command.addStringOption(option =>
+        option
+            .setName("reason")
+            .setDescription("Optional note explaining why this adjustment was made.")
+            .setRequired(false)
+    );
+}
+
+function activityHoursSubcommand(builder, name, description) {
+    return builder.addSubcommand(subcommand =>
+        activityReasonOption(
+            activityHoursOption(
+                activityMemberOption(
+                    subcommand
+                        .setName(name)
+                        .setDescription(description)
+                )
+            )
+        )
+    );
+}
+
+function activityCommand() {
+    let builder = new SlashCommandBuilder()
+        .setName("activity")
+        .setDescription("Admin tools for manual voice and stream hour corrections.")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
+
+    builder = activityHoursSubcommand(builder, "addvoice", "Add manual voice hours to a member.");
+    builder = activityHoursSubcommand(builder, "removevoice", "Remove manual voice hours from a member.");
+    builder = activityHoursSubcommand(builder, "addstream", "Add manual stream hours to a member.");
+    builder = activityHoursSubcommand(builder, "removestream", "Remove manual stream hours from a member.");
+    builder = activityHoursSubcommand(builder, "setvoice", "Set a member's displayed total voice hours.");
+    builder = activityHoursSubcommand(builder, "setstream", "Set a member's displayed total stream hours.");
+
+    builder = builder.addSubcommand(subcommand =>
+        activityReasonOption(
+            activityMemberOption(
+                subcommand
+                    .setName("reset")
+                    .setDescription("Reset manual adjustments for one activity type.")
+            ).addStringOption(option =>
+                option
+                    .setName("type")
+                    .setDescription("Which manual adjustment should be reset?")
+                    .setRequired(true)
+                    .addChoices(
+                        { name: "Voice", value: "voice" },
+                        { name: "Stream", value: "stream" }
+                    )
+            )
+        )
+    );
+
+    builder = builder.addSubcommand(subcommand =>
+        activityMemberOption(
+            subcommand
+                .setName("view")
+                .setDescription("View tracked, manual, and displayed totals for a member.")
+        )
+    );
+
+    builder = builder.addSubcommand(subcommand =>
+        activityMemberOption(
+            subcommand
+                .setName("history")
+                .setDescription("View recent manual activity corrections for a member.")
+        )
+    );
+
+    return builder;
 }
 
 function testWelcomeCommand() {
@@ -179,6 +268,7 @@ function getCommandDefinitions() {
     const definitions = [
         pingCommand(),
         glizzifyCommand(),
+        activityCommand(),
         testWelcomeCommand(),
         topGamesCommand(),
         glizzboardCommand(),

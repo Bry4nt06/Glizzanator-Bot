@@ -183,3 +183,8 @@ npm run apply:activity
 ```
 
 The server card uses these adjustments for total top voice members and total top streamer time. Re-running the script updates the same manual adjustment rows instead of duplicating them.
+
+
+## Activity admin commands
+
+Use `/activity` to correct voice and stream hours directly from Discord. See `docs/ACTIVITY_ADMIN.md` for the full command guide.

@@ -17,6 +17,10 @@ function createCommandRegistry(context) {
         execute: (interaction) => require("./utility/testWelcomeCommand").handleTestWelcomeCommand(interaction)
     });
 
+    registry.set("activity", {
+        execute: (interaction) => require("./admin/activityCommand").handleActivityCommand(interaction)
+    });
+
     registry.set("topgames", {
         execute: (interaction) => require("./gameCommands").handleTopGames(interaction, { db, saveLatestGameSearch })
     });

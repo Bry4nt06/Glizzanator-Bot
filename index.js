@@ -27,6 +27,8 @@ const client = new Client({
     ]
 });
 
+client.glizzanatorDb = db;
+
 registerGameSearchTable(db);
 
 registerReadyEvent(client, db);

@@ -62,6 +62,23 @@ db.serialize(() => {
         )
     `);
 
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS activity_adjustment_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            username TEXT,
+            activity_type TEXT NOT NULL,
+            action TEXT NOT NULL,
+            delta_seconds INTEGER NOT NULL DEFAULT 0,
+            reason TEXT,
+            created_by_id TEXT,
+            created_by_username TEXT,
+            created_at INTEGER NOT NULL
+        )
+    `);
+
     db.run(`
         CREATE TABLE IF NOT EXISTS bot_status (
             guild_id TEXT PRIMARY KEY,
@@ -113,6 +130,12 @@ db.serialize(() => {
         CREATE INDEX IF NOT EXISTS idx_activity_adjustments_guild_type_user
         ON activity_adjustments(guild_id, activity_type, user_id)
     `);
+
+    db.run(`
+        CREATE INDEX IF NOT EXISTS idx_activity_adjustment_history_guild_user
+        ON activity_adjustment_history(guild_id, user_id, created_at)
+    `);
+
 });
 
 module.exports = db;
