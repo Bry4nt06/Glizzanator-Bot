@@ -1,7 +1,7 @@
 const path = require("path");
 const sqlite3 = require("sqlite3").verbose();
 const logger = require("../utils/logger");
-const { initializeDatabase } = require("./schema");
+const DatabaseService = require("../services/DatabaseService");
 
 const DEFAULT_DATABASE_FILE = "glizzanator.db";
 
@@ -20,8 +20,9 @@ function createDatabaseConnection() {
         logger.info(`SQLite database connected: ${dbPath}`);
     });
 
-    db.configure("busyTimeout", 5000);
-    initializeDatabase(db);
+    DatabaseService.initialize(db).catch((error) => {
+        logger.error("Database initialization failed", error);
+    });
 
     return db;
 }
