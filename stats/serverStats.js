@@ -56,12 +56,14 @@ function buildTopStreamer(guild, topStreamer = {}) {
     }
 
     const member = guild.members.cache.get(topStreamer.user_id);
+    const discordUsername = member?.user?.username || topStreamer.username || "Unknown";
+    const displayName = member?.displayName || discordUsername;
 
     return {
         userId: topStreamer.user_id,
-        username: member?.displayName || member?.user?.username || topStreamer.username || "Unknown",
+        username: discordUsername,
+        displayName,
         hours: Number(topStreamer.hours || 0),
-        periodLabel: "Total Stream Time",
         avatarURL: member
             ? member.displayAvatarURL({ extension: "png", size: 128 })
             : null
