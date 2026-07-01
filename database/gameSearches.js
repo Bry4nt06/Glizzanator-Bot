@@ -1,19 +1,3 @@
-function registerGameSearchTable(db) {
-    db.run(`
-        CREATE TABLE IF NOT EXISTS latest_game_searches (
-            guild_id TEXT PRIMARY KEY,
-            genre TEXT,
-            top_pick TEXT,
-            rating TEXT,
-            metacritic TEXT,
-            released TEXT,
-            platforms TEXT,
-            top_three TEXT,
-            updated_at INTEGER
-        )
-    `);
-}
-
 const latestGameSearches = new Map();
 
 function getDefaultGameSearch() {
@@ -113,7 +97,6 @@ function getLatestGameSearch(db, guildId) {
 }
 
 module.exports = {
-    registerGameSearchTable,
     saveLatestGameSearch,
     getLatestGameSearch
 };
