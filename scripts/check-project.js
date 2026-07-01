@@ -60,7 +60,6 @@ function isDatabaseLayerFile(file) {
         || file.endsWith(`${path.sep}database${path.sep}helpers.js`)
         || file.endsWith(`${path.sep}database${path.sep}connection.js`)
         || file.endsWith(`${path.sep}services${path.sep}DatabaseService.js`)
-        || file.endsWith(`${path.sep}services${path.sep}activityService.js`)
         || file.endsWith(`${path.sep}scripts${path.sep}doctor.js`);
 }
 
