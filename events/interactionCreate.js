@@ -44,7 +44,7 @@ function registerInteractionCreateEvent(client, options) {
                 });
             }
 
-            return command.execute(interaction);
+            await command.execute(interaction);
         } catch (error) {
             logger.error("Interaction create error", error);
             return replyWithError(interaction);
