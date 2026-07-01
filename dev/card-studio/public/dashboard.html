@@ -16,6 +16,7 @@
       <button id="renderButton">Regenerate</button>
       <button id="saveLayoutButton">Save Layout</button>
       <button id="saveDataButton">Save Data</button>
+      <a id="downloadButton" class="button-link" href="#" download>Export PNG</a>
     </div>
   </header>
 
@@ -33,6 +34,11 @@
         <input id="guideToggle" type="checkbox" checked />
         Show layout guides
       </label>
+
+      <label class="toggle-row">
+        <input id="autoSaveToggle" type="checkbox" checked />
+        Auto-save visual controls
+      </label>
     </aside>
 
     <section class="preview-panel">
@@ -49,6 +55,7 @@
     <section class="controls-panel">
       <nav class="tabs">
         <button class="tab active" data-tab="quick">Quick Edit</button>
+        <button class="tab" data-tab="presets">Presets</button>
         <button class="tab" data-tab="layout">Layout JSON</button>
         <button class="tab" data-tab="data">Sample Data</button>
         <button class="tab" data-tab="uploads">Uploads</button>
@@ -56,7 +63,14 @@
 
       <div class="tab-panel active" id="tab-quick">
         <h2>Visual Controls</h2>
+        <p class="muted compact">Use fields, sliders, toggles, and color pickers to change the selected card without touching code.</p>
         <div id="quickControls" class="control-grid"></div>
+      </div>
+
+      <div class="tab-panel" id="tab-presets">
+        <h2>Design Presets</h2>
+        <p class="muted">Apply starter looks, then fine-tune in Quick Edit.</p>
+        <div id="presetList" class="preset-list"></div>
       </div>
 
       <div class="tab-panel" id="tab-layout">
@@ -71,7 +85,7 @@
 
       <div class="tab-panel" id="tab-uploads">
         <h2>Upload Assets</h2>
-        <p class="muted">Upload backgrounds, avatars, logos, and test images. The saved path can be copied into sample data or future layout files.</p>
+        <p class="muted">Upload backgrounds, avatars, logos, and test images. Use quick buttons to apply uploaded images to sample data.</p>
         <input id="assetUpload" type="file" accept="image/png,image/jpeg,image/webp" />
         <div id="uploadResult" class="upload-result"></div>
       </div>
