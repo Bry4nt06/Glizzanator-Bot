@@ -1,74 +1,204 @@
 const { createCanvas, loadImage } = require("canvas");
 const path = require("path");
 const { roundRect } = require("./drawing");
-const W = 900;
-const H = 360;
 
-// Since this file is in /utils and staleGlizz.png is in /assets
+const streamCardConfig = {
+    width: 900,
+    height: 360,
+    colors: {
+        backgroundStart: "#180f07",
+        backgroundMiddle: "#000000",
+        backgroundEnd: "#040402",
+        gold: "#f6c453",
+        white: "#ffffff",
+        muted: "#d0d4dc",
+        pillBackground: "rgba(17, 24, 32, 0.92)",
+        pillBorder: "rgba(255,255,255,0.12)",
+        liveRed: "#ef2b2d"
+    },
+    border: {
+        outerX: 18,
+        outerY: 18,
+        outerRadius: 30,
+        outerWidth: 5,
+        innerX: 28,
+        innerY: 28,
+        innerRadius: 26,
+        innerWidth: 2
+    },
+    avatar: {
+        centerX: 157.5,
+        centerY: 179,
+        radius: 98,
+        borderWidth: 5
+    },
+    text: {
+        x: 285,
+        maxWidth: 560,
+        headerY: 60,
+        usernameY: 104,
+        displayNameY: 154,
+        usernameMaxSize: 34,
+        usernameMinSize: 16,
+        displayNameMaxSize: 56,
+        displayNameMinSize: 24
+    },
+    live: {
+        enabled: true,
+        x: 285,
+        y: 74,
+        height: 36,
+        radius: 10,
+        paddingX: 14,
+        dotRadius: 8,
+        text: "LIVE"
+    },
+    pills: {
+        x: 285,
+        firstY: 185,
+        secondY: 242,
+        channelWidth: 300,
+        timeWidth: 230,
+        channelHeight: 46,
+        timeHeight: 42,
+        radius: 12,
+        fontSize: 22,
+        iconColor: "#f6c453"
+    },
+    footer: {
+        y: 325,
+        fontSize: 22,
+        text: "GLIZZANATOR STREAM ALERT"
+    },
+    backgroundImage: {
+        alpha: 0.35,
+        x: 470,
+        y: -35,
+        width: 430,
+        height: 430
+    }
+};
+
+const W = streamCardConfig.width;
+const H = streamCardConfig.height;
 const STALE_GLIZZ_PATH = path.join(__dirname, "../assets/staleGlizz.png");
 
-async function createStreamProfileCard({ member, channelName, startedAt = Date.now() }) {
-    const canvas = createCanvas(W, H);
+async function createStreamProfileCard({ member, channelName, startedAt = Date.now(), options = {} }) {
+    const config = mergeConfig(streamCardConfig, options);
+    const canvas = createCanvas(config.width, config.height);
     const ctx = canvas.getContext("2d");
 
-    const displayName = member?.displayName || member?.user?.username || "Unknown Streamer";
-    const username = member?.user?.tag || member?.user?.username || "Discord User";
+    const discordUsername = member?.user?.username || member?.user?.tag || "Discord User";
+    const displayName = member?.displayName || discordUsername;
 
     const avatarURL = member?.displayAvatarURL
         ? member.displayAvatarURL({ extension: "png", size: 512 })
         : member?.user?.displayAvatarURL?.({ extension: "png", size: 512 });
 
+    drawBackground(ctx, config);
+    await drawStaleGlizzBackground(ctx, config);
+    drawBorders(ctx, config);
+    drawHeader(ctx, config);
 
-    // Main background
-    const gradient = ctx.createLinearGradient(0, 0, W, H);
-    gradient.addColorStop(0, "#180f07");
-    gradient.addColorStop(0.6, "#000000");
-    gradient.addColorStop(1, "#040402");
+    if (config.live.enabled) {
+        drawLiveBadge(ctx, config.live.x, config.live.y, config.live, config.colors);
+    }
+
+    drawFittedText(ctx, `@${discordUsername}`, config.text.x, config.text.usernameY, config.text.maxWidth, {
+        maxSize: config.text.usernameMaxSize,
+        minSize: config.text.usernameMinSize,
+        weight: "bold",
+        color: config.colors.muted
+    });
+
+    drawFittedText(ctx, displayName, config.text.x, config.text.displayNameY, config.text.maxWidth, {
+        maxSize: config.text.displayNameMaxSize,
+        minSize: config.text.displayNameMinSize,
+        weight: "bold",
+        color: config.colors.white,
+        shadow: true
+    });
+
+    drawInfoPill(
+        ctx,
+        config.pills.x,
+        config.pills.firstY,
+        config.pills.channelWidth,
+        config.pills.channelHeight,
+        `🔊  Voice Channel: ${channelName || "Glick"}`,
+        config
+    );
+
+    drawInfoPill(
+        ctx,
+        config.pills.x,
+        config.pills.secondY,
+        config.pills.timeWidth,
+        config.pills.timeHeight,
+        `🕘  Started: ${formatTime(startedAt)}`,
+        config
+    );
+
+    await drawAvatar(ctx, avatarURL, displayName, config);
+    drawFooter(ctx, config);
+
+    return canvas.toBuffer("image/png");
+}
+
+function drawBackground(ctx, config) {
+    const gradient = ctx.createLinearGradient(0, 0, config.width, config.height);
+    gradient.addColorStop(0, config.colors.backgroundStart);
+    gradient.addColorStop(0.6, config.colors.backgroundMiddle);
+    gradient.addColorStop(1, config.colors.backgroundEnd);
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(0, 0, config.width, config.height);
+}
 
-    // Faded staleGlizz background image clipped inside card shape
-    await drawStaleGlizzBackground(ctx);
+function drawBorders(ctx, config) {
+    const outerW = config.width - config.border.outerX * 2;
+    const outerH = config.height - config.border.outerY * 2;
+    const innerW = config.width - config.border.innerX * 2;
+    const innerH = config.height - config.border.innerY * 2;
 
-    // Outer border
     ctx.strokeStyle = "rgba(246, 196, 83, 0.95)";
-    ctx.lineWidth = 5;
-    roundRect(ctx, 18, 18, W - 36, H - 36, 30, false, true);
+    ctx.lineWidth = config.border.outerWidth;
+    roundRect(ctx, config.border.outerX, config.border.outerY, outerW, outerH, config.border.outerRadius, false, true);
 
-    // Inner glow border
     ctx.shadowColor = "rgba(246, 196, 83, 0.9)";
     ctx.shadowBlur = 22;
     ctx.strokeStyle = "rgba(246, 196, 83, 0.55)";
-    ctx.lineWidth = 2;
-    roundRect(ctx, 28, 28, W - 56, H - 56, 26, false, true);
-    ctx.shadowBlur = 1;
+    ctx.lineWidth = config.border.innerWidth;
+    roundRect(ctx, config.border.innerX, config.border.innerY, innerW, innerH, config.border.innerRadius, false, true);
+    ctx.shadowBlur = 0;
+}
 
-    // Header text
-    ctx.fillStyle = "#f6c453";
+function drawHeader(ctx, config) {
+    ctx.fillStyle = config.colors.gold;
     ctx.font = "bold 34px Arial";
     ctx.textAlign = "left";
-    ctx.fillText("NOW STREAMING", 285, 60);
+    ctx.fillText("NOW STREAMING", config.text.x, config.text.headerY);
+}
 
-    // Display name
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 56px Arial";
-    ctx.fillText(fitText(ctx, displayName, 510), 285, 120);
+function drawLiveBadge(ctx, x, y, liveConfig, colors) {
+    const textWidth = ctx.measureText(liveConfig.text).width;
+    const width = textWidth + liveConfig.paddingX * 2 + liveConfig.dotRadius * 2 + 12;
 
-    // Username
-    ctx.fillStyle = "#aeb6c4";
-    ctx.font = "24px Arial";
-    ctx.fillText(fitText(ctx, username, 510), 288, 158);
+    ctx.fillStyle = colors.liveRed;
+    roundRect(ctx, x, y, width, liveConfig.height, liveConfig.radius, true, false);
 
-    // Info pills
-    drawInfoPill(ctx, 285, 185, 280, 46, `Voice Channel: ${channelName || "Glick"}`);
-    drawInfoPill(ctx, 285, 242, 210, 42, `Started: ${formatTime(startedAt)}`);
+    ctx.fillStyle = colors.white;
+    ctx.beginPath();
+    ctx.arc(x + liveConfig.paddingX + liveConfig.dotRadius, y + liveConfig.height / 2, liveConfig.dotRadius, 0, Math.PI * 2);
+    ctx.fill();
 
-    // Avatar
-    const avatarX = 157.5;
-    const avatarY = 179;
-    const avatarRadius = 98;
-    const avatarSize = avatarRadius * 2;
-    const borderRadius = avatarRadius + 4;
+    ctx.font = "bold 22px Arial";
+    ctx.textAlign = "left";
+    ctx.fillText(liveConfig.text, x + liveConfig.paddingX + liveConfig.dotRadius * 2 + 12, y + 25);
+}
+
+async function drawAvatar(ctx, avatarURL, displayName, config) {
+    const { centerX, centerY, radius, borderWidth } = config.avatar;
+    const avatarSize = radius * 2;
 
     if (avatarURL) {
         try {
@@ -76,96 +206,73 @@ async function createStreamProfileCard({ member, channelName, startedAt = Date.n
 
             ctx.save();
             ctx.beginPath();
-            ctx.arc(avatarX, avatarY, avatarRadius, 0, Math.PI * 2);
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
             ctx.closePath();
             ctx.clip();
-
-            ctx.drawImage(
-                avatar,
-                avatarX - avatarRadius,
-                avatarY - avatarRadius,
-                avatarSize,
-                avatarSize
-            );
-
+            ctx.drawImage(avatar, centerX - radius, centerY - radius, avatarSize, avatarSize);
             ctx.restore();
 
-            ctx.strokeStyle = "#f6c453";
-            ctx.lineWidth = 5;
+            ctx.strokeStyle = config.colors.gold;
+            ctx.lineWidth = borderWidth;
             ctx.beginPath();
-            ctx.arc(avatarX, avatarY, borderRadius, 0, Math.PI * 2);
+            ctx.arc(centerX, centerY, radius + 4, 0, Math.PI * 2);
             ctx.stroke();
+            return;
         } catch {
-            drawAvatarFallback(ctx, avatarX, avatarY, displayName, avatarRadius);
+            // Fall through to fallback avatar.
         }
-    } else {
-        drawAvatarFallback(ctx, avatarX, avatarY, displayName, avatarRadius);
     }
 
-    // Footer text
-    ctx.fillStyle = "#f6c453";
-    ctx.font = "bold 22px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText("GLIZZANATOR STREAM ALERT", W / 2, 325);
-
-    return canvas.toBuffer("image/png");
+    drawAvatarFallback(ctx, centerX, centerY, displayName, radius, config);
 }
 
-async function drawStaleGlizzBackground(ctx) {
+async function drawStaleGlizzBackground(ctx, config) {
     try {
         const staleGlizz = await loadImage(STALE_GLIZZ_PATH);
-
-        const cardX = 18;
-        const cardY = 18;
-        const cardW = W - 36;
-        const cardH = H - 36;
-        const cardR = 30;
+        const cardX = config.border.outerX;
+        const cardY = config.border.outerY;
+        const cardW = config.width - config.border.outerX * 2;
+        const cardH = config.height - config.border.outerY * 2;
 
         ctx.save();
-
-        // Clip the background image so it only appears inside the card shape
-        roundedPath(ctx, cardX, cardY, cardW, cardH, cardR);
+        roundedPath(ctx, cardX, cardY, cardW, cardH, config.border.outerRadius);
         ctx.clip();
+        ctx.globalAlpha = config.backgroundImage.alpha;
+        ctx.drawImage(
+            staleGlizz,
+            config.backgroundImage.x,
+            config.backgroundImage.y,
+            config.backgroundImage.width,
+            config.backgroundImage.height
+        );
 
-        // Make it a light background object
-        ctx.globalAlpha = 0.35;
-
-        // Large background placement
-        const imgW = 430;
-        const imgH = 430;
-        const imgX = W - 430;
-        const imgY = -35;
-
-        ctx.drawImage(staleGlizz, imgX, imgY, imgW, imgH);
-
-        // Dark fade over the image so card text stays readable
         ctx.globalAlpha = 0.55;
-        const fade = ctx.createLinearGradient(250, 0, W, 0);
+        const fade = ctx.createLinearGradient(250, 0, config.width, 0);
         fade.addColorStop(0, "rgba(7, 16, 24, 0)");
         fade.addColorStop(0.6, "rgba(7, 16, 24, 0.25)");
         fade.addColorStop(1, "rgba(2, 3, 4, 0.78)");
         ctx.fillStyle = fade;
         ctx.fillRect(cardX, cardY, cardW, cardH);
-
         ctx.restore();
     } catch (err) {
-        console.warn("Could not load staleGlizz.png:", err.message);
+        console.warn("Could not load staleGlizz.png", { error: err.message });
     }
 }
 
-function drawInfoPill(ctx, x, y, w, h, text) {
-    ctx.fillStyle = "rgba(17, 24, 32, 0.92)";
-    ctx.strokeStyle = "rgba(255,255,255,0.12)";
+function drawInfoPill(ctx, x, y, w, h, text, config) {
+    ctx.fillStyle = config.colors.pillBackground;
+    ctx.strokeStyle = config.colors.pillBorder;
     ctx.lineWidth = 1;
-    roundRect(ctx, x, y, w, h, 12, true, true);
+    roundRect(ctx, x, y, w, h, config.pills.radius, true, true);
 
-    ctx.fillStyle = "#e9edf5";
-    ctx.font = "22px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText(fitText(ctx, text, w - 34), x + 17, y + 30);
+    drawFittedText(ctx, text, x + 17, y + Math.round(h * 0.66), w - 34, {
+        maxSize: config.pills.fontSize,
+        minSize: 14,
+        color: "#e9edf5"
+    });
 }
 
-function drawAvatarFallback(ctx, cx, cy, name, radius = 98) {
+function drawAvatarFallback(ctx, cx, cy, name, radius = 98, config = streamCardConfig) {
     const initials = String(name || "?")
         .split(/\s+/)
         .map(part => part[0])
@@ -178,28 +285,55 @@ function drawAvatarFallback(ctx, cx, cy, name, radius = 98) {
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = "#f6c453";
-    ctx.lineWidth = 5;
+    ctx.strokeStyle = config.colors.gold;
+    ctx.lineWidth = config.avatar.borderWidth;
     ctx.beginPath();
     ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.fillStyle = "#f6c453";
+    ctx.fillStyle = config.colors.gold;
     ctx.font = "bold 64px Arial";
     ctx.textAlign = "center";
     ctx.fillText(initials || "?", cx, cy + 22);
 }
 
-function fitText(ctx, text, maxWidth) {
-    const value = String(text || "");
-    if (ctx.measureText(value).width <= maxWidth) return value;
+function drawFooter(ctx, config) {
+    ctx.fillStyle = config.colors.gold;
+    ctx.font = `bold ${config.footer.fontSize}px Arial`;
+    ctx.textAlign = "center";
+    ctx.fillText(config.footer.text, config.width / 2, config.footer.y);
+}
 
-    let shortened = value;
-    while (shortened.length > 0 && ctx.measureText(`${shortened}...`).width > maxWidth) {
-        shortened = shortened.slice(0, -1);
+function drawFittedText(ctx, text, x, y, maxWidth, options = {}) {
+    const {
+        maxSize = 24,
+        minSize = 12,
+        weight = "",
+        family = "Arial",
+        color = "#ffffff",
+        shadow = false
+    } = options;
+    const value = String(text || "");
+    let size = maxSize;
+
+    while (size > minSize) {
+        ctx.font = `${weight ? `${weight} ` : ""}${size}px ${family}`;
+        if (ctx.measureText(value).width <= maxWidth) break;
+        size--;
     }
 
-    return shortened.length ? `${shortened}...` : "...";
+    ctx.fillStyle = color;
+    ctx.font = `${weight ? `${weight} ` : ""}${size}px ${family}`;
+
+    if (shadow) {
+        ctx.shadowColor = "rgba(246,196,83,0.65)";
+        ctx.shadowBlur = 9;
+    }
+
+    ctx.fillText(value, x, y);
+    ctx.shadowBlur = 0;
+
+    return size;
 }
 
 function formatTime(ms) {
@@ -223,4 +357,25 @@ function roundedPath(ctx, x, y, w, h, r) {
     ctx.closePath();
 }
 
-module.exports = { createStreamProfileCard };
+function mergeConfig(base, overrides) {
+    if (!overrides || typeof overrides !== "object") {
+        return base;
+    }
+
+    const merged = Array.isArray(base) ? [...base] : { ...base };
+
+    for (const [key, value] of Object.entries(overrides)) {
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+            merged[key] = mergeConfig(base[key] || {}, value);
+        } else {
+            merged[key] = value;
+        }
+    }
+
+    return merged;
+}
+
+module.exports = {
+    createStreamProfileCard,
+    streamCardConfig
+};
