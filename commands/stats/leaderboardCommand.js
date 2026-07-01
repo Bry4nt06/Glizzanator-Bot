@@ -1,7 +1,6 @@
 const { EmbedBuilder } = require("discord.js");
-const { dbAll } = require("../../database/helpers");
+const StatisticsRepository = require("../../database/repositories/StatisticsRepository");
 const { getPeriodStart } = require("../../stats/timeWindows");
-const { overlapSecondsExpression } = require("../../stats/sqlExpressions");
 const logger = require("../../utils/logger");
 
 function formatVoiceTime(seconds) {
@@ -27,44 +26,6 @@ function buildLeaderboardEmbed({ title, rows, formatRow }) {
         .setColor(0xf6c453);
 }
 
-async function getVoiceLeaderboard(db, guildId, since, now) {
-    return dbAll(
-        db,
-        `
-        SELECT
-            user_id,
-            username,
-            SUM(${overlapSecondsExpression()}) AS total_voice
-        FROM voice_sessions
-        WHERE guild_id = ?
-        GROUP BY user_id
-        HAVING total_voice > 0
-        ORDER BY total_voice DESC
-        LIMIT 10
-        `,
-        [now, since, now, now, now, since, guildId]
-    );
-}
-
-async function getMessageLeaderboard(db, guildId, since) {
-    return dbAll(
-        db,
-        `
-        SELECT
-            user_id,
-            username,
-            COUNT(*) AS total_messages
-        FROM messages
-        WHERE guild_id = ?
-        AND created_at >= ?
-        GROUP BY user_id
-        ORDER BY total_messages DESC
-        LIMIT 10
-        `,
-        [guildId, since]
-    );
-}
-
 async function handleLeaderboardCommand(options) {
     const { db, interaction } = options;
 
@@ -78,7 +39,7 @@ async function handleLeaderboardCommand(options) {
 
     try {
         if (type === "voice") {
-            const rows = await getVoiceLeaderboard(db, guildId, since, now);
+            const rows = await StatisticsRepository.getVoiceLeaderboard(db, guildId, since, now);
 
             if (!rows.length) {
                 return interaction.editReply(`📭 No voice leaderboard data found for **${period}**.`);
@@ -93,7 +54,7 @@ async function handleLeaderboardCommand(options) {
             return interaction.editReply({ embeds: [embed] });
         }
 
-        const rows = await getMessageLeaderboard(db, guildId, since);
+        const rows = await StatisticsRepository.getMessageLeaderboard(db, guildId, since);
 
         if (!rows.length) {
             return interaction.editReply(`📭 No message leaderboard data found for **${period}**.`);
@@ -113,7 +74,5 @@ async function handleLeaderboardCommand(options) {
 }
 
 module.exports = {
-    handleLeaderboardCommand,
-    getVoiceLeaderboard,
-    getMessageLeaderboard
+    handleLeaderboardCommand
 };
