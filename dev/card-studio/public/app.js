@@ -2,7 +2,8 @@ const state = {
   selectedCard: localStorage.getItem("cardStudio.card") || "server",
   studio: null,
   layout: {},
-  sampleData: {}
+  sampleData: {},
+  renderTimer: null
 };
 
 const el = {
@@ -14,13 +15,79 @@ const el = {
   renderButton: document.getElementById("renderButton"),
   saveLayoutButton: document.getElementById("saveLayoutButton"),
   saveDataButton: document.getElementById("saveDataButton"),
+  downloadButton: document.getElementById("downloadButton"),
   layoutEditor: document.getElementById("layoutEditor"),
   dataEditor: document.getElementById("dataEditor"),
   quickControls: document.getElementById("quickControls"),
+  presetList: document.getElementById("presetList"),
   guideToggle: document.getElementById("guideToggle"),
+  autoSaveToggle: document.getElementById("autoSaveToggle"),
   guideOverlay: document.getElementById("guideOverlay"),
   assetUpload: document.getElementById("assetUpload"),
   uploadResult: document.getElementById("uploadResult")
+};
+
+const presets = {
+  stream: [
+    {
+      name: "High Society Gold",
+      description: "Original dark card with gold trim and red LIVE badge.",
+      values: {
+        "card.backgroundColor": "#180f07",
+        "card.accentColor": "#f6c453",
+        "card.borderColor": "#f6c453",
+        "text.username.color": "#d0d4dc",
+        "text.displayName.color": "#ffffff",
+        "live.badgeColor": "#ef2b2d"
+      }
+    },
+    {
+      name: "Clean Dark",
+      description: "Flatter charcoal style with softer contrast.",
+      values: {
+        "card.backgroundColor": "#070a10",
+        "card.accentColor": "#d7a83c",
+        "card.borderColor": "#d7a83c",
+        "text.username.color": "#aeb6c4",
+        "text.displayName.color": "#f5f7fb",
+        "live.badgeColor": "#d62828"
+      }
+    },
+    {
+      name: "Neon Live",
+      description: "Higher contrast preview for stream alerts.",
+      values: {
+        "card.backgroundColor": "#050914",
+        "card.accentColor": "#ffcc4d",
+        "card.borderColor": "#ffcc4d",
+        "text.username.color": "#91cfff",
+        "text.displayName.color": "#ffffff",
+        "live.badgeColor": "#ff1744"
+      }
+    }
+  ],
+  server: [
+    {
+      name: "High Society Gold",
+      description: "Default server dashboard colors.",
+      values: {
+        "card.accentColor": "#f6c453",
+        "card.backgroundColor": "#050608",
+        "topStreamer.usernameColor": "#aeb6c4",
+        "topStreamer.displayNameColor": "#f6c453"
+      }
+    },
+    {
+      name: "Soft Dashboard",
+      description: "Muted gold and lighter streamer text.",
+      values: {
+        "card.accentColor": "#d7a83c",
+        "card.backgroundColor": "#090d14",
+        "topStreamer.usernameColor": "#c5ccd8",
+        "topStreamer.displayNameColor": "#f5d37a"
+      }
+    }
+  ]
 };
 
 async function requestJson(url, options = {}) {
@@ -83,6 +150,7 @@ async function loadLayout() {
   state.layout = data.layout || {};
   el.layoutEditor.value = pretty(state.layout);
   buildQuickControls();
+  buildPresetControls();
 
   const card = activeCardDefinition();
   el.previewTitle.textContent = card?.label || state.selectedCard;
@@ -91,9 +159,27 @@ async function loadLayout() {
 async function renderPreview() {
   setStatus("Rendering...");
   const data = await requestJson(`/render?card=${state.selectedCard}&t=${Date.now()}`);
-  el.previewImage.src = `/image/${data.outputName}?t=${Date.now()}`;
+  const imageUrl = `/image/${data.outputName}?t=${Date.now()}`;
+  el.previewImage.src = imageUrl;
+  el.downloadButton.href = imageUrl;
+  el.downloadButton.download = data.outputName || `${state.selectedCard}.png`;
   el.updatedAt.textContent = new Date().toLocaleTimeString();
   setStatus(data.message || "Rendered.");
+}
+
+function scheduleRender() {
+  clearTimeout(state.renderTimer);
+  state.renderTimer = setTimeout(async () => {
+    try {
+      if (el.autoSaveToggle?.checked) {
+        await saveLayout({ quiet: true });
+      } else {
+        await renderPreview();
+      }
+    } catch (error) {
+      setStatus(error.message);
+    }
+  }, 450);
 }
 
 function parseEditor(text, label) {
@@ -104,7 +190,7 @@ function parseEditor(text, label) {
   }
 }
 
-async function saveLayout() {
+async function saveLayout(options = {}) {
   const layout = parseEditor(el.layoutEditor.value, "Layout");
   const data = await requestJson(`/api/layout?card=${state.selectedCard}`, {
     method: "POST",
@@ -113,7 +199,8 @@ async function saveLayout() {
   state.layout = data.layout;
   el.layoutEditor.value = pretty(state.layout);
   buildQuickControls();
-  setStatus("Layout saved.");
+  buildPresetControls();
+  if (!options.quiet) setStatus("Layout saved.");
   await renderPreview();
 }
 
@@ -144,7 +231,7 @@ function getDeepValue(target, path) {
   return path.split(".").reduce((cursor, part) => cursor?.[part], target);
 }
 
-function makeField(label, path, type = "number") {
+function makeField(label, path, type = "number", options = {}) {
   const wrapper = document.createElement("div");
   wrapper.className = "field";
 
@@ -153,17 +240,38 @@ function makeField(label, path, type = "number") {
 
   const input = document.createElement("input");
   input.type = type;
-  input.value = getDeepValue(state.layout, path) ?? "";
+
+  if (type === "range") {
+    input.min = options.min ?? 0;
+    input.max = options.max ?? 1000;
+    input.step = options.step ?? 1;
+  }
+
+  const value = getDeepValue(state.layout, path);
+  if (type === "checkbox") {
+    input.checked = Boolean(value);
+  } else {
+    input.value = value ?? "";
+  }
+
+  const valueLabel = document.createElement("span");
+  valueLabel.className = "field-value";
+  valueLabel.textContent = type === "checkbox" ? (input.checked ? "On" : "Off") : input.value;
 
   input.addEventListener("input", () => {
-    const value = type === "number" ? Number(input.value) : type === "checkbox" ? input.checked : input.value;
-    setDeepValue(state.layout, path, value);
+    const nextValue = type === "number" || type === "range"
+      ? Number(input.value)
+      : type === "checkbox"
+        ? input.checked
+        : input.value;
+
+    setDeepValue(state.layout, path, nextValue);
+    valueLabel.textContent = type === "checkbox" ? (input.checked ? "On" : "Off") : input.value;
     el.layoutEditor.value = pretty(state.layout);
+    scheduleRender();
   });
 
-  if (type === "checkbox") input.checked = Boolean(getDeepValue(state.layout, path));
-
-  wrapper.append(labelEl, input);
+  wrapper.append(labelEl, input, valueLabel);
   return wrapper;
 }
 
@@ -183,49 +291,49 @@ function buildQuickControls() {
   if (state.selectedCard === "stream") {
     el.quickControls.append(
       makeGroup("Card Layout", [
-        makeField("Width", "card.width"),
-        makeField("Height", "card.height"),
-        makeField("Corner Radius", "card.cornerRadius"),
-        makeField("Border Width", "card.borderWidth"),
+        makeField("Width", "card.width", "number"),
+        makeField("Height", "card.height", "number"),
+        makeField("Corner Radius", "card.cornerRadius", "range", { min: 0, max: 60 }),
+        makeField("Border Width", "card.borderWidth", "range", { min: 0, max: 12 }),
         makeField("Border Color", "card.borderColor", "color"),
         makeField("Accent Color", "card.accentColor", "color")
       ]),
       makeGroup("Avatar", [
-        makeField("Avatar Size", "avatar.size"),
-        makeField("Avatar X", "avatar.x"),
-        makeField("Avatar Y", "avatar.y"),
-        makeField("Avatar Border", "avatar.borderWidth"),
+        makeField("Avatar Size", "avatar.size", "range", { min: 80, max: 240 }),
+        makeField("Avatar X", "avatar.x", "range", { min: 0, max: 300 }),
+        makeField("Avatar Y", "avatar.y", "range", { min: 0, max: 220 }),
+        makeField("Avatar Border", "avatar.borderWidth", "range", { min: 0, max: 14 }),
         makeField("Avatar Border Color", "avatar.borderColor", "color")
       ]),
       makeGroup("Discord Username", [
-        makeField("X", "text.username.x"),
-        makeField("Y", "text.username.y"),
-        makeField("Max Font", "text.username.maxSize"),
-        makeField("Min Font", "text.username.minSize"),
+        makeField("X", "text.username.x", "range", { min: 0, max: 760 }),
+        makeField("Y", "text.username.y", "range", { min: 40, max: 260 }),
+        makeField("Max Font", "text.username.maxSize", "range", { min: 12, max: 52 }),
+        makeField("Min Font", "text.username.minSize", "range", { min: 8, max: 30 }),
         makeField("Color", "text.username.color", "color")
       ]),
       makeGroup("Server Nickname", [
-        makeField("X", "text.displayName.x"),
-        makeField("Y", "text.displayName.y"),
-        makeField("Max Font", "text.displayName.maxSize"),
-        makeField("Min Font", "text.displayName.minSize"),
+        makeField("X", "text.displayName.x", "range", { min: 0, max: 760 }),
+        makeField("Y", "text.displayName.y", "range", { min: 60, max: 280 }),
+        makeField("Max Font", "text.displayName.maxSize", "range", { min: 18, max: 80 }),
+        makeField("Min Font", "text.displayName.minSize", "range", { min: 10, max: 42 }),
         makeField("Color", "text.displayName.color", "color")
       ]),
       makeGroup("Live Indicator", [
         makeField("Enabled", "live.enabled", "checkbox"),
-        makeField("X", "live.x"),
-        makeField("Y", "live.y"),
+        makeField("X", "live.x", "range", { min: 0, max: 760 }),
+        makeField("Y", "live.y", "range", { min: 20, max: 260 }),
         makeField("Text", "live.text", "text"),
         makeField("Badge Color", "live.badgeColor", "color"),
         makeField("Text Color", "live.textColor", "color")
       ], true),
       makeGroup("Info Boxes", [
-        makeField("X", "infoBoxes.x"),
-        makeField("First Y", "infoBoxes.firstY"),
-        makeField("Second Y", "infoBoxes.secondY"),
-        makeField("Channel Width", "infoBoxes.channelWidth"),
-        makeField("Time Width", "infoBoxes.timeWidth"),
-        makeField("Font Size", "infoBoxes.fontSize")
+        makeField("X", "infoBoxes.x", "range", { min: 0, max: 760 }),
+        makeField("First Y", "infoBoxes.firstY", "range", { min: 100, max: 320 }),
+        makeField("Second Y", "infoBoxes.secondY", "range", { min: 120, max: 330 }),
+        makeField("Channel Width", "infoBoxes.channelWidth", "range", { min: 120, max: 500 }),
+        makeField("Time Width", "infoBoxes.timeWidth", "range", { min: 120, max: 420 }),
+        makeField("Font Size", "infoBoxes.fontSize", "range", { min: 12, max: 34 })
       ], true)
     );
     return;
@@ -233,8 +341,8 @@ function buildQuickControls() {
 
   el.quickControls.append(
     makeGroup("Card", [
-      makeField("Width", "card.width"),
-      makeField("Height", "card.height"),
+      makeField("Width", "card.width", "number"),
+      makeField("Height", "card.height", "number"),
       makeField("Accent Color", "card.accentColor", "color"),
       makeField("Background", "card.backgroundColor", "color")
     ], true),
@@ -245,6 +353,29 @@ function buildQuickControls() {
       makeField("Display Name Color", "topStreamer.displayNameColor", "color")
     ], true)
   );
+}
+
+function buildPresetControls() {
+  el.presetList.innerHTML = "";
+  const cardPresets = presets[state.selectedCard] || [];
+
+  if (!cardPresets.length) {
+    el.presetList.innerHTML = `<p class="muted">No presets configured for this card yet.</p>`;
+    return;
+  }
+
+  cardPresets.forEach((preset) => {
+    const card = document.createElement("button");
+    card.className = "preset-card";
+    card.innerHTML = `<strong>${preset.name}</strong><span>${preset.description}</span>`;
+    card.addEventListener("click", async () => {
+      Object.entries(preset.values).forEach(([path, value]) => setDeepValue(state.layout, path, value));
+      el.layoutEditor.value = pretty(state.layout);
+      buildQuickControls();
+      await saveLayout();
+    });
+    el.presetList.appendChild(card);
+  });
 }
 
 async function uploadAsset(file) {
@@ -307,7 +438,10 @@ function wireEvents() {
   events.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.card === state.selectedCard && data.outputName) {
-      el.previewImage.src = `/image/${data.outputName}?t=${Date.now()}`;
+      const imageUrl = `/image/${data.outputName}?t=${Date.now()}`;
+      el.previewImage.src = imageUrl;
+      el.downloadButton.href = imageUrl;
+      el.downloadButton.download = data.outputName;
       el.updatedAt.textContent = new Date().toLocaleTimeString();
       setStatus(data.message || "Updated.");
     }
