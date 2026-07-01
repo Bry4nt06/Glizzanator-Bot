@@ -1,7 +1,7 @@
 const MessageRepository = require("../database/repositories/MessageRepository");
 const logger = require("../utils/logger");
 
-async function handleMessageCreate(db, message) {
+async function track(db, message) {
     if (message.author.bot) return;
     if (!message.guild) return;
 
@@ -19,5 +19,5 @@ async function handleMessageCreate(db, message) {
 }
 
 module.exports = {
-    handleMessageCreate
+    track
 };
