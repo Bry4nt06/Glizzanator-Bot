@@ -29,20 +29,45 @@ const client = new Client({
 
 client.glizzanatorDb = db;
 
-registerGameSearchTable(db);
+async function registerBot() {
+    if (db.ready) {
+        await db.ready;
+    }
 
-registerReadyEvent(client, db);
-registerMessageCreateEvent(client, db);
-registerVoiceStateUpdateEvent(client, db);
-registerGuildMemberAddEvent(client);
+    registerGameSearchTable(db);
+    registerReadyEvent(client, db);
+    registerMessageCreateEvent(client, db);
+    registerVoiceStateUpdateEvent(client, db);
+    registerGuildMemberAddEvent(client);
 
-registerInteractionCreateEvent(client, {
-    db,
-    saveLatestGameSearch,
-    getLatestGameSearch
-});
+    registerInteractionCreateEvent(client, {
+        db,
+        saveLatestGameSearch,
+        getLatestGameSearch
+    });
+}
 
-client.login(config.discord.token).catch((error) => {
-    logger.error("Discord login failed", error);
-    process.exitCode = 1;
-});
+function shutdown(signal) {
+    logger.info(`Received ${signal}. Shutting down Glizzanator.`);
+    client.destroy();
+
+    db.close((error) => {
+        if (error) {
+            logger.error("Database close failed", error);
+            process.exit(1);
+        }
+
+        logger.info("Database connection closed.");
+        process.exit(0);
+    });
+}
+
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);
+
+registerBot()
+    .then(() => client.login(config.discord.token))
+    .catch((error) => {
+        logger.error("Glizzanator startup failed", error);
+        process.exitCode = 1;
+    });
