@@ -14,14 +14,8 @@ function getTemplatePath() {
     return TEMPLATE_PATH;
 }
 
-function trimTextToWidth(ctx, text, maxWidth) {
-    let cleanText = String(text || "").trim();
-
-    while (ctx.measureText(cleanText).width > maxWidth && cleanText.length > 3) {
-        cleanText = cleanText.slice(0, -4).trim() + "...";
-    }
-
-    return cleanText;
+function buildFont(weight, size, family = "Arial") {
+    return `${weight} ${size}px ${family}`;
 }
 
 function drawCenteredText(ctx, text, x, y, maxWidth, font, color, options = {}) {
@@ -36,7 +30,43 @@ function drawCenteredText(ctx, text, x, y, maxWidth, font, color, options = {}) 
         ctx.shadowBlur = options.shadowBlur || 18;
     }
 
-    ctx.fillText(trimTextToWidth(ctx, text, maxWidth), x, y);
+    ctx.fillText(String(text || "").trim(), x, y, maxWidth);
+    ctx.restore();
+}
+
+function drawFitCenteredText(ctx, text, x, y, maxWidth, fontOptions, color, options = {}) {
+    const {
+        weight = 900,
+        size = 52,
+        minSize = 24,
+        family = "Arial"
+    } = fontOptions;
+
+    let currentSize = size;
+    const safeText = String(text || "").trim();
+
+    ctx.save();
+
+    while (currentSize > minSize) {
+        ctx.font = buildFont(weight, currentSize, family);
+
+        if (ctx.measureText(safeText).width <= maxWidth) {
+            break;
+        }
+
+        currentSize -= 2;
+    }
+
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    if (options.shadow) {
+        ctx.shadowColor = options.shadowColor || "rgba(255, 198, 56, 0.9)";
+        ctx.shadowBlur = options.shadowBlur || 18;
+    }
+
+    ctx.fillText(safeText, x, y, maxWidth);
     ctx.restore();
 }
 
@@ -52,7 +82,7 @@ function drawLeftText(ctx, text, x, y, maxWidth, font, color, options = {}) {
         ctx.shadowBlur = options.shadowBlur || 18;
     }
 
-    ctx.fillText(trimTextToWidth(ctx, text, maxWidth), x, y);
+    ctx.fillText(String(text || "").trim(), x, y, maxWidth);
     ctx.restore();
 }
 
@@ -199,12 +229,20 @@ async function createWelcomeCard(input = {}) {
         drawAvatarPlaceholder(ctx, 264, 493, 118);
     }
 
-    drawCenteredText(ctx, "NEW MEMBER", 635, 370, 430, "900 31px Arial", "#ffcc3d", {
+    drawFitCenteredText(ctx, username, 635, 386, 475, {
+        weight: 900,
+        size: 56,
+        minSize: 28
+    }, "#ffcc3d", {
         shadow: true,
         shadowBlur: 10
     });
 
-    drawCenteredText(ctx, username, 635, 438, 475, "900 52px Arial", "#ffffff", {
+    drawFitCenteredText(ctx, username, 635, 450, 475, {
+        weight: 900,
+        size: 52,
+        minSize: 26
+    }, "#ffffff", {
         shadow: true,
         shadowColor: "rgba(255, 255, 255, 0.55)",
         shadowBlur: 8
@@ -215,7 +253,11 @@ async function createWelcomeCard(input = {}) {
         shadowBlur: 10
     });
 
-    drawCenteredText(ctx, finalGlizzyName, 665, 615, 430, "900 40px Arial", "#ffffff", {
+    drawFitCenteredText(ctx, finalGlizzyName, 665, 615, 430, {
+        weight: 900,
+        size: 40,
+        minSize: 22
+    }, "#ffffff", {
         shadow: true,
         shadowColor: "rgba(255, 196, 60, 0.85)",
         shadowBlur: 14
