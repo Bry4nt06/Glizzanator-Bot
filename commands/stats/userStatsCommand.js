@@ -1,52 +1,8 @@
 const { createUserStatsCard } = require("../../cards/userCard");
-const { dbGet } = require("../../database/helpers");
+const StatisticsRepository = require("../../database/repositories/StatisticsRepository");
 const { getTimeWindows } = require("../../stats/timeWindows");
-const { overlapSecondsExpression } = require("../../stats/sqlExpressions");
 const { sendLatestCard } = require("../utility/cardMessageManager");
 const logger = require("../../utils/logger");
-
-async function getUserMessageStats(db, guildId, userId, windows) {
-    return dbGet(
-        db,
-        `
-        SELECT
-            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_1d,
-            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_7d,
-            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_30d,
-            COUNT(*) AS messages_total
-        FROM messages
-        WHERE user_id = ?
-        AND guild_id = ?
-        `,
-        [windows.oneDayAgo, windows.sevenDaysAgo, windows.thirtyDaysAgo, userId, guildId],
-        {}
-    );
-}
-
-async function getUserVoiceStats(db, guildId, userId, windows) {
-    return dbGet(
-        db,
-        `
-        SELECT
-            SUM(${overlapSecondsExpression()}) AS voice_1d,
-            SUM(${overlapSecondsExpression()}) AS voice_7d,
-            SUM(${overlapSecondsExpression()}) AS voice_30d,
-            SUM(CASE WHEN left_at IS NULL THEN CAST((? - joined_at) / 1000 AS INTEGER) ELSE duration_seconds END) AS voice_total
-        FROM voice_sessions
-        WHERE user_id = ?
-        AND guild_id = ?
-        `,
-        [
-            windows.now, windows.oneDayAgo, windows.now, windows.now, windows.now, windows.oneDayAgo,
-            windows.now, windows.sevenDaysAgo, windows.now, windows.now, windows.now, windows.sevenDaysAgo,
-            windows.now, windows.thirtyDaysAgo, windows.now, windows.now, windows.now, windows.thirtyDaysAgo,
-            windows.now,
-            userId,
-            guildId
-        ],
-        {}
-    );
-}
 
 function toHours(seconds) {
     return ((Number(seconds || 0)) / 3600).toFixed(2);
@@ -64,8 +20,8 @@ async function handleUserStatsCommand(options) {
 
     try {
         const [messageStats, voiceStats] = await Promise.all([
-            getUserMessageStats(db, guildId, userId, windows),
-            getUserVoiceStats(db, guildId, userId, windows)
+            StatisticsRepository.getUserMessageStats(db, guildId, userId, windows),
+            StatisticsRepository.getUserVoiceStats(db, guildId, userId, windows)
         ]);
 
         const buffer = await createUserStatsCard({
@@ -99,7 +55,5 @@ async function handleUserStatsCommand(options) {
 }
 
 module.exports = {
-    handleUserStatsCommand,
-    getUserMessageStats,
-    getUserVoiceStats
+    handleUserStatsCommand
 };
