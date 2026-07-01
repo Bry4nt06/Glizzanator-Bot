@@ -49,12 +49,10 @@ async function getServerStats(db, guild) {
             SELECT
                 user_id,
                 username,
-                SUM(
-                    CASE
-                        WHEN COALESCE(left_at, ?) <= joined_at THEN 0
-                        ELSE CAST((COALESCE(left_at, ?) - joined_at) / 1000 AS INTEGER)
-                    END
-                ) AS seconds
+                COALESCE(SUM(CASE
+                    WHEN COALESCE(left_at, ?) <= joined_at THEN 0
+                    ELSE CAST((COALESCE(left_at, ?) - joined_at) / 1000 AS INTEGER)
+                END), 0) AS seconds
             FROM voice_sessions
             WHERE guild_id = ?
             GROUP BY user_id
@@ -64,10 +62,11 @@ async function getServerStats(db, guild) {
             SELECT
                 user_id,
                 username,
-                seconds
+                COALESCE(SUM(seconds), 0) AS seconds
             FROM activity_adjustments
             WHERE guild_id = ?
             AND activity_type = 'voice'
+            GROUP BY user_id
         )
         SELECT
             user_id,
@@ -88,12 +87,7 @@ async function getServerStats(db, guild) {
         SELECT
             channel_id,
             channel_name,
-            ROUND(SUM(
-                CASE
-                    WHEN COALESCE(left_at, ?) <= joined_at THEN 0
-                    ELSE CAST((COALESCE(left_at, ?) - joined_at) / 1000 AS INTEGER)
-                END
-            ) / 3600.0, 2) AS hours
+            ROUND(SUM(${overlapSecondsExpression()}) / 3600.0, 2) AS hours
         FROM voice_sessions
         WHERE guild_id = ?
         GROUP BY channel_id
@@ -101,7 +95,7 @@ async function getServerStats(db, guild) {
         ORDER BY hours DESC
         LIMIT 5
         `,
-        [now, now, guildId]
+        [now, thirtyDaysAgo, now, now, now, thirtyDaysAgo, guildId]
     );
 
     const topStreamerQuery = dbGet(
@@ -111,12 +105,10 @@ async function getServerStats(db, guild) {
             SELECT
                 user_id,
                 username,
-                SUM(
-                    CASE
-                        WHEN COALESCE(ended_at, ?) <= started_at THEN 0
-                        ELSE CAST((COALESCE(ended_at, ?) - started_at) / 1000 AS INTEGER)
-                    END
-                ) AS seconds
+                COALESCE(SUM(CASE
+                    WHEN COALESCE(ended_at, ?) <= started_at THEN 0
+                    ELSE CAST((COALESCE(ended_at, ?) - started_at) / 1000 AS INTEGER)
+                END), 0) AS seconds
             FROM stream_sessions
             WHERE guild_id = ?
             GROUP BY user_id
@@ -126,7 +118,7 @@ async function getServerStats(db, guild) {
             SELECT
                 user_id,
                 username,
-                seconds
+                COALESCE(SUM(seconds), 0) AS seconds
             FROM activity_adjustments
             WHERE guild_id = ?
             AND activity_type = 'stream'
@@ -176,6 +168,7 @@ function buildTopMembers(guild, topUsers = []) {
 
         return {
             username: member?.user?.username || user.username || "Unknown",
+            displayName: member?.displayName || user.username || "Unknown",
             hours: user.hours || 0,
             avatarURL: member
                 ? member.user.displayAvatarURL({ extension: "png", size: 128 })
@@ -190,10 +183,13 @@ function buildTopStreamer(guild, topStreamer = {}) {
     }
 
     const member = guild.members.cache.get(topStreamer.user_id);
+    const username = member?.user?.username || topStreamer.username || "Unknown";
+    const displayName = member?.displayName || username;
 
     return {
         userId: topStreamer.user_id,
-        username: member?.displayName || member?.user?.username || topStreamer.username || "Unknown",
+        username,
+        displayName,
         hours: Number(topStreamer.hours || 0),
         periodLabel: "Total Stream Time",
         avatarURL: member
