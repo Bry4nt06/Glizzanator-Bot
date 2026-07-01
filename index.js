@@ -10,7 +10,6 @@ const registerInteractionCreateEvent = require("./events/interactionCreate");
 const registerGuildMemberAddEvent = require("./events/guildMemberAdd");
 
 const {
-    registerGameSearchTable,
     saveLatestGameSearch,
     getLatestGameSearch
 } = require("./database/gameSearches");
@@ -34,7 +33,6 @@ async function registerBot() {
         await db.ready;
     }
 
-    registerGameSearchTable(db);
     registerReadyEvent(client, db);
     registerMessageCreateEvent(client, db);
     registerVoiceStateUpdateEvent(client, db);
