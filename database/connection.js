@@ -20,8 +20,9 @@ function createDatabaseConnection() {
         logger.info(`SQLite database connected: ${dbPath}`);
     });
 
-    DatabaseService.initialize(db).catch((error) => {
+    db.ready = DatabaseService.initialize(db).catch((error) => {
         logger.error("Database initialization failed", error);
+        throw error;
     });
 
     return db;
