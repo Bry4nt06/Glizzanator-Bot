@@ -114,6 +114,43 @@ async function loadAsset(fileName) {
     }
 }
 
+function buildFont(weight, size, family = "Arial") {
+    return `${weight} ${size}px ${family}`;
+}
+
+function drawFittedText(ctx, text, x, y, maxWidth, options = {}) {
+    const {
+        weight = 400,
+        size = 24,
+        minSize = 14,
+        family = "Arial",
+        color = "#ffffff",
+        align = "left"
+    } = options;
+
+    const value = String(text || "").trim();
+    let currentSize = size;
+
+    ctx.save();
+
+    while (currentSize > minSize) {
+        ctx.font = buildFont(weight, currentSize, family);
+
+        if (ctx.measureText(value).width <= maxWidth) {
+            break;
+        }
+
+        currentSize -= 1;
+    }
+
+    ctx.fillStyle = color;
+    ctx.font = buildFont(weight, currentSize, family);
+    ctx.textAlign = align;
+    ctx.fillText(value, x, y, maxWidth);
+
+    ctx.restore();
+}
+
 async function drawStreamLookback(ctx, x, y, w, h, topStreamer) {
     ctx.save();
 
@@ -155,6 +192,8 @@ async function drawStreamLookback(ctx, x, y, w, h, topStreamer) {
     const avatarSize = 76;
     const avatarX = x + 38;
     const avatarY = y + 82;
+    const textX = x + 130;
+    const textWidth = w - 165;
 
     if (topStreamer.avatarURL) {
         await drawCircleImage(ctx, topStreamer.avatarURL, avatarX, avatarY, avatarSize);
@@ -162,24 +201,33 @@ async function drawStreamLookback(ctx, x, y, w, h, topStreamer) {
         drawSmallRank(ctx, avatarX + 18, avatarY + 18, 1);
     }
 
-    ctx.fillStyle = "#f6c453";
-    ctx.font = "bold 22px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText(fitText(ctx, topStreamer.username, 225), x + 130, y + 112);
+    drawFittedText(ctx, topStreamer.username, textX, y + 100, textWidth, {
+        weight: 700,
+        size: 22,
+        minSize: 14,
+        color: "#f6c453"
+    });
+
+    drawFittedText(ctx, topStreamer.displayName || topStreamer.username, textX, y + 125, textWidth, {
+        weight: 700,
+        size: 21,
+        minSize: 13,
+        color: "#ffffff"
+    });
 
     ctx.fillStyle = "rgba(17, 24, 32, 0.92)";
     ctx.strokeStyle = "rgba(255,255,255,0.10)";
     ctx.lineWidth = 1;
-    roundRect(ctx, x + 130, y + 126, w - 165, 34, 7, true, true);
+    roundRect(ctx, textX, y + 137, textWidth, 34, 7, true, true);
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "23px Arial";
     ctx.textAlign = "center";
-    ctx.fillText(`${topStreamer.hours || 0} hrs streamed`, x + 130 + (w - 165) / 2, y + 151);
+    ctx.fillText(`${topStreamer.hours || 0} hrs streamed`, textX + textWidth / 2, y + 162);
 
     ctx.fillStyle = "#aeb6c4";
-    ctx.font = "19px Arial";
-    ctx.fillText(topStreamer.periodLabel || "Total Stream Time", x + w / 2, y + 182);
+    ctx.font = "18px Arial";
+    ctx.fillText(topStreamer.periodLabel || "Total Stream Time", x + w / 2, y + 187);
 
     ctx.textAlign = "left";
     ctx.restore();
@@ -265,14 +313,22 @@ async function drawLeaderboard(ctx, x, y, w, h, title, lines, type) {
         if (type === "members" && typeof line === "object" && line.avatarURL) {
             await drawCircleImage(ctx, line.avatarURL, x + 42, rowY + 3, 38);
 
-            ctx.fillStyle = "#ffffff";
+            const hoursText = `${line.hours || 0} hrs`;
             ctx.font = "25px Arial";
-            ctx.textAlign = "left";
-            ctx.fillText(line.username || "Unknown", x + 95, rowY + 30);
+            const hoursWidth = ctx.measureText(hoursText).width;
+            const nameWidth = Math.max(120, w - 180 - hoursWidth);
+
+            drawFittedText(ctx, line.username || "Unknown", x + 95, rowY + 30, nameWidth, {
+                weight: 400,
+                size: 25,
+                minSize: 14,
+                color: "#ffffff"
+            });
 
             ctx.fillStyle = i === 0 ? "#f6c453" : "#b7bfd0";
             ctx.textAlign = "right";
-            ctx.fillText(`${line.hours || 0} hrs`, x + w - 55, rowY + 30);
+            ctx.font = "25px Arial";
+            ctx.fillText(hoursText, x + w - 55, rowY + 30);
             ctx.textAlign = "left";
         } else {
             drawSmallRank(ctx, x + 45, rowY + 7, i + 1);
@@ -282,13 +338,20 @@ async function drawLeaderboard(ctx, x, y, w, h, title, lines, type) {
             const name = parts[0] || clean;
             const hours = parts[1] || "";
 
-            ctx.fillStyle = "#ffffff";
             ctx.font = "25px Arial";
-            ctx.textAlign = "left";
-            ctx.fillText(name, x + 105, rowY + 30);
+            const hoursWidth = ctx.measureText(hours).width;
+            const nameWidth = Math.max(120, w - 195 - hoursWidth);
+
+            drawFittedText(ctx, name, x + 105, rowY + 30, nameWidth, {
+                weight: 400,
+                size: 25,
+                minSize: 14,
+                color: "#ffffff"
+            });
 
             ctx.fillStyle = i === 0 ? "#f6c453" : "#b7bfd0";
             ctx.textAlign = "right";
+            ctx.font = "25px Arial";
             ctx.fillText(hours, x + w - 55, rowY + 30);
             ctx.textAlign = "left";
         }
@@ -436,29 +499,29 @@ async function drawMusicBox(ctx, x, y, w, h, music = {}) {
     ctx.lineWidth = 2;
     roundRect(ctx, artX, artY, artSize, artSize, 9, true, true);
 
-if (music.thumbnail) {
-    try {
-        const thumbnailUrl = cleanThumbnailUrl(music.thumbnail);
+    if (music.thumbnail) {
+        try {
+            const thumbnailUrl = cleanThumbnailUrl(music.thumbnail);
 
-        console.log("Loading music thumbnail:", thumbnailUrl);
+            console.log("Loading music thumbnail:", thumbnailUrl);
 
-        const art = thumbnailUrl.startsWith("http")
-            ? await loadRemoteImage(thumbnailUrl)
-            : await loadImage(thumbnailUrl);
+            const art = thumbnailUrl.startsWith("http")
+                ? await loadRemoteImage(thumbnailUrl)
+                : await loadImage(thumbnailUrl);
 
-        ctx.save();
-        roundRect(ctx, artX, artY, artSize, artSize, 9, false, false);
-        ctx.clip();
-        ctx.drawImage(art, artX, artY, artSize, artSize);
-        ctx.restore();
+            ctx.save();
+            roundRect(ctx, artX, artY, artSize, artSize, 9, false, false);
+            ctx.clip();
+            ctx.drawImage(art, artX, artY, artSize, artSize);
+            ctx.restore();
 
-        ctx.strokeStyle = "rgba(246, 183, 45, 0.45)";
-        ctx.lineWidth = 2;
-        roundRect(ctx, artX, artY, artSize, artSize, 9, false, true);
-    } catch (err) {
-        console.log("Failed to load album art:", err.message);
+            ctx.strokeStyle = "rgba(246, 183, 45, 0.45)";
+            ctx.lineWidth = 2;
+            roundRect(ctx, artX, artY, artSize, artSize, 9, false, true);
+        } catch (err) {
+            console.log("Failed to load album art:", err.message);
+        }
     }
-}
 
     const textX = artX + artSize + 22;
 
@@ -593,68 +656,68 @@ async function drawGameBox(ctx, x, y, w, h, game = {}) {
     }
 
     // =========================
-// MIDDLE = TOP PICK DETAILS
-// =========================
-const midX = x + 375;       // moves the whole block right
-const detailsX = midX;      // shared left edge for all text
-const detailsWidth = 300;   // max width for truncation
+    // MIDDLE = TOP PICK DETAILS
+    // =========================
+    const midX = x + 375;       // moves the whole block right
+    const detailsX = midX;      // shared left edge for all text
+    const detailsWidth = 300;   // max width for truncation
 
-ctx.fillStyle = "#f6c453";
-ctx.font = "bold 21px Arial";
-ctx.fillText("🏆 TOP PICK", detailsX, y + 40);
+    ctx.fillStyle = "#f6c453";
+    ctx.font = "bold 21px Arial";
+    ctx.fillText("🏆 TOP PICK", detailsX, y + 40);
 
-ctx.fillStyle = "#ffffff";
-ctx.font = "bold 31px Arial";
-ctx.fillText(fitText(ctx, topPick, detailsWidth), detailsX, y + 91);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 31px Arial";
+    ctx.fillText(fitText(ctx, topPick, detailsWidth), detailsX, y + 91);
 
-ctx.fillStyle = "#c8ced8";
-ctx.font = "17px Arial";
-ctx.fillText(
-    fitText(ctx, `⭐ ${rating}   🟩 ${metacritic}   📅 ${released}`, detailsWidth),
-    detailsX,
-    y + 134
-);
+    ctx.fillStyle = "#c8ced8";
+    ctx.font = "17px Arial";
+    ctx.fillText(
+        fitText(ctx, `⭐ ${rating}   🟩 ${metacritic}   📅 ${released}`, detailsWidth),
+        detailsX,
+        y + 134
+    );
 
-ctx.fillStyle = "#8b93a5";
-ctx.font = "17px Arial";
-ctx.fillText(
-    fitText(ctx, `🎮 ${platforms}`, detailsWidth),
-    detailsX,
-    y + 158
-);
+    ctx.fillStyle = "#8b93a5";
+    ctx.font = "17px Arial";
+    ctx.fillText(
+        fitText(ctx, `🎮 ${platforms}`, detailsWidth),
+        detailsX,
+        y + 158
+    );
 
-// =========================
-// RIGHT SIDE = TOP 3
-// =========================
-const top3BoxX = x + 675;
-const top3BoxW = 350;
-const top3CenterX = top3BoxX + top3BoxW / 2;
+    // =========================
+    // RIGHT SIDE = TOP 3
+    // =========================
+    const top3BoxX = x + 675;
+    const top3BoxW = 350;
+    const top3CenterX = top3BoxX + top3BoxW / 2;
 
-ctx.textAlign = "center";
+    ctx.textAlign = "center";
 
-ctx.fillStyle = "#f6c453";
-ctx.font = "bold 21px Arial";
-ctx.fillText("TOP 3 RESULTS", top3CenterX, y + 40);
+    ctx.fillStyle = "#f6c453";
+    ctx.font = "bold 21px Arial";
+    ctx.fillText("TOP 3 RESULTS", top3CenterX, y + 40);
 
-ctx.fillStyle = "#c8ced8";
-ctx.font = "20px Arial";
+    ctx.fillStyle = "#c8ced8";
+    ctx.font = "20px Arial";
 
-if (topThree.length) {
-    topThree.slice(0, 3).forEach((name, index) => {
-        ctx.fillText(
-            `${index + 1}. ${fitText(ctx, name, 280)}`,
-            top3CenterX,
-            y + 88 + index * 25
-        );
-    });
-} else {
-    ctx.fillText("1. Run /topgames", top3CenterX, y + 88);
-    ctx.fillText("2. Use /topgames horror", top3CenterX, y + 113);
-    ctx.fillText("3. Then run /serverstats", top3CenterX, y + 138);
-}
+    if (topThree.length) {
+        topThree.slice(0, 3).forEach((name, index) => {
+            ctx.fillText(
+                `${index + 1}. ${fitText(ctx, name, 280)}`,
+                top3CenterX,
+                y + 88 + index * 25
+            );
+        });
+    } else {
+        ctx.fillText("1. Run /topgames", top3CenterX, y + 88);
+        ctx.fillText("2. Use /topgames horror", top3CenterX, y + 113);
+        ctx.fillText("3. Then run /serverstats", top3CenterX, y + 138);
+    }
 
-ctx.textAlign = "left";
-ctx.restore();
+    ctx.textAlign = "left";
+    ctx.restore();
 }
 
 module.exports = { createStatsCard };
