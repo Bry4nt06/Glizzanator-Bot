@@ -1,0 +1,10 @@
+[
+  {
+    "guildId": "123456789012345678",
+    "userId": "123456789012345678",
+    "username": "Example Member",
+    "voiceHours": 0,
+    "streamHours": 0,
+    "reason": "Manual catch-up for offline tracking time"
+  }
+]
