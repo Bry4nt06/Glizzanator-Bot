@@ -15,6 +15,7 @@ const requiredPaths = [
     "database/migrations/migrationRunner.js",
     "database/repositories/MessageRepository.js",
     "database/repositories/StatusRepository.js",
+    "database/repositories/StatisticsRepository.js",
     "database/repositories/StreamRepository.js",
     "database/repositories/VoiceRepository.js",
     "services/ActivityRecoveryService.js",
@@ -43,6 +44,16 @@ const forbiddenPatterns = [
         allowedPathIncludes: null
     }
 ];
+
+const sqlBoundaryPatterns = ["SELECT ", "INSERT ", "UPDATE ", "DELETE "];
+
+function isDatabaseLayerFile(file) {
+    return file.includes(`${path.sep}database${path.sep}repositories${path.sep}`)
+        || file.includes(`${path.sep}database${path.sep}migrations${path.sep}`)
+        || file.endsWith(`${path.sep}database${path.sep}helpers.js`)
+        || file.endsWith(`${path.sep}database${path.sep}connection.js`)
+        || file.endsWith(`${path.sep}scripts${path.sep}doctor.js`);
+}
 
 function walk(directory) {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -127,8 +138,37 @@ function checkForbiddenPatterns() {
     console.log("No forbidden legacy schema patterns found.");
 }
 
+function checkSqlBoundaries() {
+    const violations = [];
+
+    for (const file of jsFiles) {
+        if (isDatabaseLayerFile(file)) continue;
+
+        const content = fs.readFileSync(file, "utf8");
+        const matchedPattern = sqlBoundaryPatterns.find((pattern) => content.includes(pattern));
+
+        if (matchedPattern) {
+            violations.push({
+                file: path.relative(root, file),
+                pattern: matchedPattern.trim()
+            });
+        }
+    }
+
+    if (violations.length) {
+        console.error("SQL found outside database layer:");
+        for (const violation of violations) {
+            console.error(`- ${violation.file}: ${violation.pattern}`);
+        }
+        process.exit(1);
+    }
+
+    console.log("SQL boundary check passed.");
+}
+
 walk(root);
 checkSyntax();
 checkRequiredFiles();
 checkLegacySchemaRemoved();
 checkForbiddenPatterns();
+checkSqlBoundaries();
