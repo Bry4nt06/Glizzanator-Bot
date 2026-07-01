@@ -1,29 +1,9 @@
-const { dbRun } = require("../database/helpers");
-const logger = require("../utils/logger");
+const messageTracking = require("../services/MessageTrackingService");
 
-module.exports = function registerMessageCreateEvent(client, db) {
-    client.on("messageCreate", async (message) => {
-        if (message.author.bot) return;
-        if (!message.guild) return;
-
-        try {
-            await dbRun(
-                db,
-                `
-                INSERT INTO messages
-                (user_id, username, channel_id, guild_id, created_at)
-                VALUES (?, ?, ?, ?, ?)
-                `,
-                [
-                    message.author.id,
-                    message.author.username,
-                    message.channel.id,
-                    message.guild.id,
-                    Date.now()
-                ]
-            );
-        } catch (error) {
-            logger.error("Message tracking insert failed", error);
-        }
+function registerMessageCreateEvent(client, db) {
+    client.on("messageCreate", (message) => {
+        messageTracking.track(db, message);
     });
-};
+}
+
+module.exports = registerMessageCreateEvent;
