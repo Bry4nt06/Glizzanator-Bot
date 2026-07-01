@@ -44,6 +44,41 @@ async function getUserVoiceStats(db, guildId, userId, windows) {
     );
 }
 
+async function getServerMessageStats(db, guildId, windows) {
+    return dbGet(
+        db,
+        `
+        SELECT
+            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_1d,
+            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_7d,
+            COUNT(CASE WHEN created_at >= ? THEN 1 END) AS messages_30d
+        FROM messages
+        WHERE guild_id = ?
+        `,
+        [windows.oneDayAgo, windows.sevenDaysAgo, windows.thirtyDaysAgo, guildId]
+    );
+}
+
+async function getServerVoiceStats(db, guildId, windows) {
+    return dbGet(
+        db,
+        `
+        SELECT
+            SUM(${overlapSecondsExpression()}) AS voice_1d,
+            SUM(${overlapSecondsExpression()}) AS voice_7d,
+            SUM(${overlapSecondsExpression()}) AS voice_30d
+        FROM voice_sessions
+        WHERE guild_id = ?
+        `,
+        [
+            windows.now, windows.oneDayAgo, windows.now, windows.now, windows.now, windows.oneDayAgo,
+            windows.now, windows.sevenDaysAgo, windows.now, windows.now, windows.now, windows.sevenDaysAgo,
+            windows.now, windows.thirtyDaysAgo, windows.now, windows.now, windows.now, windows.thirtyDaysAgo,
+            guildId
+        ]
+    );
+}
+
 async function getVoiceLeaderboard(db, guildId, since, now) {
     return dbAll(
         db,
@@ -85,6 +120,8 @@ async function getMessageLeaderboard(db, guildId, since) {
 module.exports = {
     getUserMessageStats,
     getUserVoiceStats,
+    getServerMessageStats,
+    getServerVoiceStats,
     getVoiceLeaderboard,
     getMessageLeaderboard
 };
