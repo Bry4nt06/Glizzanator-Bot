@@ -79,6 +79,74 @@ async function getServerVoiceStats(db, guildId, windows) {
     );
 }
 
+async function getTopVoiceUsers(db, guildId, now) {
+    return dbAll(
+        db,
+        `
+        WITH voice_totals AS (
+            SELECT user_id, username, SUM(CASE WHEN COALESCE(left_at, ?) <= joined_at THEN 0 ELSE CAST((COALESCE(left_at, ?) - joined_at) / 1000 AS INTEGER) END) AS seconds
+            FROM voice_sessions
+            WHERE guild_id = ?
+            GROUP BY user_id
+            UNION ALL
+            SELECT user_id, username, seconds
+            FROM activity_adjustments
+            WHERE guild_id = ?
+            AND activity_type = 'voice'
+        )
+        SELECT user_id, COALESCE(MAX(NULLIF(username, '')), 'Unknown') AS username, ROUND(SUM(seconds) / 3600.0, 2) AS hours
+        FROM voice_totals
+        GROUP BY user_id
+        HAVING hours > 0
+        ORDER BY hours DESC
+        LIMIT 5
+        `,
+        [now, now, guildId, guildId]
+    );
+}
+
+async function getTopVoiceChannels(db, guildId, now) {
+    return dbAll(
+        db,
+        `
+        SELECT channel_id, channel_name, ROUND(SUM(CASE WHEN COALESCE(left_at, ?) <= joined_at THEN 0 ELSE CAST((COALESCE(left_at, ?) - joined_at) / 1000 AS INTEGER) END) / 3600.0, 2) AS hours
+        FROM voice_sessions
+        WHERE guild_id = ?
+        GROUP BY channel_id
+        HAVING hours > 0
+        ORDER BY hours DESC
+        LIMIT 5
+        `,
+        [now, now, guildId]
+    );
+}
+
+async function getTopStreamer(db, guildId, now) {
+    return dbGet(
+        db,
+        `
+        WITH stream_totals AS (
+            SELECT user_id, username, SUM(CASE WHEN COALESCE(ended_at, ?) <= started_at THEN 0 ELSE CAST((COALESCE(ended_at, ?) - started_at) / 1000 AS INTEGER) END) AS seconds
+            FROM stream_sessions
+            WHERE guild_id = ?
+            GROUP BY user_id
+            UNION ALL
+            SELECT user_id, username, seconds
+            FROM activity_adjustments
+            WHERE guild_id = ?
+            AND activity_type = 'stream'
+        )
+        SELECT user_id, COALESCE(MAX(NULLIF(username, '')), 'Unknown') AS username, ROUND(SUM(seconds) / 3600.0, 2) AS hours
+        FROM stream_totals
+        GROUP BY user_id
+        HAVING hours > 0
+        ORDER BY hours DESC
+        LIMIT 1
+        `,
+        [now, now, guildId, guildId]
+    );
+}
+
 async function getVoiceLeaderboard(db, guildId, since, now) {
     return dbAll(
         db,
@@ -122,6 +190,9 @@ module.exports = {
     getUserVoiceStats,
     getServerMessageStats,
     getServerVoiceStats,
+    getTopVoiceUsers,
+    getTopVoiceChannels,
+    getTopStreamer,
     getVoiceLeaderboard,
     getMessageLeaderboard
 };
