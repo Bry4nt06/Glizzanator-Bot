@@ -170,6 +170,18 @@ async function handleHistory(interaction) {
     ].join("\n"));
 }
 
+const SUBCOMMAND_HANDLERS = {
+    addvoice: (interaction) => handleAddOrRemove(interaction, "voice", 1),
+    removevoice: (interaction) => handleAddOrRemove(interaction, "voice", -1),
+    addstream: (interaction) => handleAddOrRemove(interaction, "stream", 1),
+    removestream: (interaction) => handleAddOrRemove(interaction, "stream", -1),
+    setvoice: (interaction) => handleSet(interaction, "voice"),
+    setstream: (interaction) => handleSet(interaction, "stream"),
+    reset: handleReset,
+    view: handleView,
+    history: handleHistory
+};
+
 async function handleActivityCommand(interaction) {
     if (!interaction.guild) {
         return interaction.reply({
@@ -188,18 +200,13 @@ async function handleActivityCommand(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
     const subcommand = interaction.options.getSubcommand();
+    const handler = SUBCOMMAND_HANDLERS[subcommand];
 
-    if (subcommand === "addvoice") return handleAddOrRemove(interaction, "voice", 1);
-    if (subcommand === "removevoice") return handleAddOrRemove(interaction, "voice", -1);
-    if (subcommand === "addstream") return handleAddOrRemove(interaction, "stream", 1);
-    if (subcommand === "removestream") return handleAddOrRemove(interaction, "stream", -1);
-    if (subcommand === "setvoice") return handleSet(interaction, "voice");
-    if (subcommand === "setstream") return handleSet(interaction, "stream");
-    if (subcommand === "reset") return handleReset(interaction);
-    if (subcommand === "view") return handleView(interaction);
-    if (subcommand === "history") return handleHistory(interaction);
+    if (!handler) {
+        return interaction.editReply("Unknown activity subcommand.");
+    }
 
-    return interaction.editReply("Unknown activity subcommand.");
+    return handler(interaction);
 }
 
 module.exports = {
