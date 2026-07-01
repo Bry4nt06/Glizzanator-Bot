@@ -1,4 +1,4 @@
-const ActivityRecoveryService = require("../services/ActivityRecoveryService");
+const { ActivityRecoveryService } = require("../services");
 const logger = require("../utils/logger");
 
 module.exports = function registerReadyEvent(client, db) {
