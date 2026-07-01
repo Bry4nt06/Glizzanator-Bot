@@ -50,6 +50,10 @@ const forbiddenPatterns = [
 const sqlBoundaryPatterns = ["SELECT ", "INSERT ", "UPDATE ", "DELETE "];
 const directDatabaseCallPatterns = ["db.run(", "db.get(", "db.all(", "dbRun(", "dbGet(", "dbAll("];
 
+function isCheckerFile(file) {
+    return file.endsWith(`${path.sep}scripts${path.sep}check-project.js`);
+}
+
 function isDatabaseLayerFile(file) {
     return file.includes(`${path.sep}database${path.sep}repositories${path.sep}`)
         || file.includes(`${path.sep}database${path.sep}migrations${path.sep}`)
@@ -116,6 +120,8 @@ function checkForbiddenPatterns() {
     const violations = [];
 
     for (const file of jsFiles) {
+        if (isCheckerFile(file)) continue;
+
         const content = fs.readFileSync(file, "utf8");
 
         for (const rule of forbiddenPatterns) {
@@ -145,7 +151,7 @@ function checkSqlBoundaries() {
     const violations = [];
 
     for (const file of jsFiles) {
-        if (isDatabaseLayerFile(file)) continue;
+        if (isCheckerFile(file) || isDatabaseLayerFile(file)) continue;
 
         const content = fs.readFileSync(file, "utf8");
         const matchedSql = sqlBoundaryPatterns.find((pattern) => content.includes(pattern));
