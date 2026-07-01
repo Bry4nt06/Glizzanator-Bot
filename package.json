@@ -7,6 +7,7 @@
     "start": "node index.js",
     "deploy": "node deploy-commands.js",
     "check": "node scripts/check-project.js",
+    "doctor": "node scripts/doctor.js",
     "apply:activity": "node scripts/apply-activity-adjustments.js",
     "preview": "node preview-card.js",
     "preview:card": "node preview-card.js",
