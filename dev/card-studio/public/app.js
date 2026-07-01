@@ -21,8 +21,13 @@ const el = {
   quickControls: document.getElementById("quickControls"),
   presetList: document.getElementById("presetList"),
   guideToggle: document.getElementById("guideToggle"),
+  designerToggle: document.getElementById("designerToggle"),
   autoSaveToggle: document.getElementById("autoSaveToggle"),
   guideOverlay: document.getElementById("guideOverlay"),
+  designerOverlay: document.getElementById("designerOverlay"),
+  layerList: document.getElementById("layerList"),
+  selectedInspector: document.getElementById("selectedInspector"),
+  previewStage: document.getElementById("previewStage"),
   assetUpload: document.getElementById("assetUpload"),
   uploadResult: document.getElementById("uploadResult")
 };
@@ -129,6 +134,7 @@ async function selectCard(card) {
   renderCardButtons();
   await loadLayout();
   await renderPreview();
+  window.dispatchEvent(new CustomEvent("cardstudio:layout-loaded"));
 }
 
 async function loadStudio() {
@@ -154,6 +160,7 @@ async function loadLayout() {
 
   const card = activeCardDefinition();
   el.previewTitle.textContent = card?.label || state.selectedCard;
+  window.dispatchEvent(new CustomEvent("cardstudio:layout-loaded"));
 }
 
 async function renderPreview() {
@@ -165,6 +172,7 @@ async function renderPreview() {
   el.downloadButton.download = data.outputName || `${state.selectedCard}.png`;
   el.updatedAt.textContent = new Date().toLocaleTimeString();
   setStatus(data.message || "Rendered.");
+  window.dispatchEvent(new CustomEvent("cardstudio:rendered"));
 }
 
 function scheduleRender() {
@@ -202,6 +210,7 @@ async function saveLayout(options = {}) {
   buildPresetControls();
   if (!options.quiet) setStatus("Layout saved.");
   await renderPreview();
+  window.dispatchEvent(new CustomEvent("cardstudio:layout-saved"));
 }
 
 async function saveSampleData() {
@@ -423,11 +432,27 @@ function wireTabs() {
   });
 }
 
+function exposeStudioApi() {
+  window.CardStudio = {
+    state,
+    el,
+    getDeepValue,
+    setDeepValue,
+    pretty,
+    saveLayout,
+    renderPreview,
+    scheduleRender,
+    setStatus,
+    buildQuickControls
+  };
+}
+
 function wireEvents() {
   el.renderButton.addEventListener("click", renderPreview);
   el.saveLayoutButton.addEventListener("click", () => saveLayout().catch((error) => setStatus(error.message)));
   el.saveDataButton.addEventListener("click", () => saveSampleData().catch((error) => setStatus(error.message)));
   el.guideToggle.addEventListener("change", () => el.guideOverlay.classList.toggle("visible", el.guideToggle.checked));
+  el.designerToggle?.addEventListener("change", () => window.dispatchEvent(new CustomEvent("cardstudio:designer-toggle")));
   el.guideOverlay.classList.toggle("visible", el.guideToggle.checked);
   el.assetUpload.addEventListener("change", () => {
     const file = el.assetUpload.files?.[0];
@@ -444,11 +469,13 @@ function wireEvents() {
       el.downloadButton.download = data.outputName;
       el.updatedAt.textContent = new Date().toLocaleTimeString();
       setStatus(data.message || "Updated.");
+      window.dispatchEvent(new CustomEvent("cardstudio:rendered"));
     }
   };
 }
 
 async function init() {
+  exposeStudioApi();
   wireTabs();
   wireEvents();
   await loadStudio();
